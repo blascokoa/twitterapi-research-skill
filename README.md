@@ -89,16 +89,89 @@ bun run x-search.ts search "query" --save --markdown
 ### Search options
 ```
 --sort likes|impressions|retweets|recent   (default: likes)
-  --since 1h|3h|12h|1d|7d     Time filter (default: last 7 days)
+--since 1h|3h|12h|1d|7d     Time filter (default: last 7 days)
 --min-likes N              Filter minimum likes
 --min-impressions N        Filter minimum impressions
 --pages N                  Pages to fetch, 1-5 (default: 1, 100 tweets/page)
 --limit N                  Results to display (default: 15)
+--quick                    Quick mode (see below)
+--from <username>          Shorthand for from:username in query
+--quality                  Pre-filter low-engagement tweets (min_faves:10)
 --no-replies               Exclude replies
 --save                     Save to ~/clawd/drafts/
 --json                     Raw JSON output
 --markdown                 Markdown research doc
 ```
+
+## Quick Mode
+
+`--quick` is designed for fast, cheap lookups when you just need a pulse check on a topic.
+
+**What it does:**
+- Forces single page (max 10 results) — reduces API reads
+- Auto-appends `-is:retweet -is:reply` noise filters (unless you explicitly used those operators)
+- Uses 1-hour cache TTL instead of the default 15 minutes
+- Shows cost summary after results
+
+**Examples:**
+```bash
+# Quick pulse check on a topic
+bun run x-search.ts search "BNKR" --quick
+
+# Quick check what someone is saying
+bun run x-search.ts search "BNKR" --from voidcider --quick
+
+# Quick quality-only results
+bun run x-search.ts search "AI agents" --quality --quick
+```
+
+**Cost comparison:**
+| Mode | Pages | Max tweets | Est. cost |
+|------|-------|-----------|-----------|
+| `--quick` | 1 | 10 | ~$0.50 |
+| Default (1 page) | 1 | 100 | ~$0.50 |
+| Multi-page (3) | 3 | 300 | ~$1.50 |
+
+## `--from` Shorthand
+
+Adds `from:username` to your query without having to type the full operator syntax.
+
+```bash
+# These are equivalent:
+bun run x-search.ts search "BNKR from:voidcider"
+bun run x-search.ts search "BNKR" --from voidcider
+
+# Works with --quick and other flags
+bun run x-search.ts search "AI" --from frankdegods --quick --quality
+```
+
+If your query already contains `from:`, the flag won't double-add it.
+
+## `--quality` Flag
+
+Filters out low-engagement tweets (requires ≥10 likes). Since `min_faves` is unavailable on X API Basic tier, this is applied post-hoc after fetching. Useful for high-noise topics where you only want tweets with some traction.
+
+```bash
+bun run x-search.ts search "crypto AI" --quality
+```
+
+## Cost
+
+X API charges ~$0.005 per tweet read. Every search result counts as a read.
+
+**How x-search minimizes cost:**
+- **Caching**: Identical queries are cached (15min default, 1hr in quick mode). Repeated searches hit cache instead of the API.
+- **Quick mode**: Single page + noise filters = fewer junk reads
+- **Quality filter**: `min_faves:10` pre-filters before counting against quota
+- **Cost display**: Every search shows estimated cost so you always know what you're spending
+
+**Typical costs:**
+| Operation | Tweets | Est. cost |
+|-----------|--------|-----------|
+| Quick search | ~10-100 | ~$0.05-$0.50 |
+| Standard search (1 page) | ~100 | ~$0.50 |
+| Deep research (5 queries × 2 pages) | ~1000 | ~$5.00 |
+| Watchlist check (5 accounts) | ~25 | ~$0.13 |
 
 ## File structure
 

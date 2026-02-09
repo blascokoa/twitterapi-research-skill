@@ -40,12 +40,15 @@ bun run x-search.ts search "<query>" [options]
 - `--min-impressions N` — filter by minimum impressions
 - `--pages N` — pages to fetch, 1-5 (default: 1, 100 tweets/page)
 - `--limit N` — max results to display (default: 15)
+- `--quick` — quick mode: 1 page, max 10 results, auto noise filter (`-is:retweet -is:reply`), 1hr cache, cost summary
+- `--from <username>` — shorthand for `from:username` in query
+- `--quality` — filter low-engagement tweets (≥10 likes, post-hoc)
 - `--no-replies` — exclude replies
 - `--save` — save results to `~/clawd/drafts/x-research-{slug}-{date}.md`
 - `--json` — raw JSON output
 - `--markdown` — markdown output for research docs
 
-Auto-adds `-is:retweet` unless query already includes it.
+Auto-adds `-is:retweet` unless query already includes it. All searches display estimated API cost.
 
 **Examples:**
 ```bash
@@ -53,6 +56,9 @@ bun run x-search.ts search "BNKR" --sort likes --limit 10
 bun run x-search.ts search "from:frankdegods" --sort recent
 bun run x-search.ts search "(opus 4.6 OR claude) trading" --pages 2 --save
 bun run x-search.ts search "$BNKR (revenue OR fees)" --min-likes 5
+bun run x-search.ts search "BNKR" --quick
+bun run x-search.ts search "BNKR" --from voidcider --quick
+bun run x-search.ts search "AI agents" --quality --quick
 ```
 
 ### Profile

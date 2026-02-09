@@ -21,6 +21,9 @@
  *   --no-replies               Exclude replies
  *   --no-retweets              Exclude retweets (added by default)
  *   --limit N                  Max results to display (default: 15)
+ *   --quick                    Quick mode: 1 page, noise filter, 1hr cache
+ *   --from <username>          Shorthand for from:username in query
+ *   --quality                  Pre-filter low-engagement (min_faves:10)
  *   --save                     Save results to ~/clawd/drafts/
  *   --json                     Output raw JSON
  *   --markdown                 Output as markdown (for research docs)
@@ -79,17 +82,28 @@ function saveWatchlist(wl: Watchlist) {
 // --- Commands ---
 
 async function cmdSearch() {
+  // Parse new flags first (before getOpt consumes positional args)
+  const quick = getFlag("quick");
+  const quality = getFlag("quality");
+  const fromUser = getOpt("from");
+
   const sortOpt = getOpt("sort") || "likes";
   const minLikes = parseInt(getOpt("min-likes") || "0");
   const minImpressions = parseInt(getOpt("min-impressions") || "0");
-  const pages = Math.min(parseInt(getOpt("pages") || "1"), 5);
-  const limit = parseInt(getOpt("limit") || "15");
+  let pages = Math.min(parseInt(getOpt("pages") || "1"), 5);
+  let limit = parseInt(getOpt("limit") || "15");
   const since = getOpt("since");
   const noReplies = getFlag("no-replies");
   const noRetweets = getFlag("no-retweets");
   const save = getFlag("save");
   const asJson = getFlag("json");
   const asMarkdown = getFlag("markdown");
+
+  // Quick mode overrides
+  if (quick) {
+    pages = 1;
+    limit = Math.min(limit, 10);
+  }
 
   // Everything after "search" that isn't a flag is the query
   const queryParts = args.slice(1).filter((a) => !a.startsWith("--"));
@@ -100,17 +114,27 @@ async function cmdSearch() {
     process.exit(1);
   }
 
+  // --from shorthand: add from:username if not already in query
+  if (fromUser && !query.toLowerCase().includes("from:")) {
+    query += ` from:${fromUser.replace(/^@/, "")}`;
+  }
+
   // Auto-add noise filters unless already present
   if (!query.includes("is:retweet") && !noRetweets) {
     query += " -is:retweet";
   }
-  if (noReplies && !query.includes("is:reply")) {
+  if (quick && !query.includes("is:reply")) {
+    query += " -is:reply";
+  } else if (noReplies && !query.includes("is:reply")) {
     query += " -is:reply";
   }
 
-  // Check cache
+  // Cache TTL: 1hr for quick mode, 15min default
+  const cacheTtlMs = quick ? 3_600_000 : 900_000;
+
+  // Check cache (cache key does NOT include quick flag — shared between modes)
   const cacheParams = `sort=${sortOpt}&pages=${pages}&since=${since || "7d"}`;
-  const cached = cache.get(query, cacheParams);
+  const cached = cache.get(query, cacheParams, cacheTtlMs);
   let tweets: api.Tweet[];
 
   if (cached) {
@@ -125,12 +149,20 @@ async function cmdSearch() {
     cache.set(query, cacheParams, tweets);
   }
 
+  // Track raw count for cost (API charges per tweet read, regardless of post-hoc filters)
+  const rawTweetCount = tweets.length;
+
   // Filter
   if (minLikes > 0 || minImpressions > 0) {
     tweets = api.filterEngagement(tweets, {
       minLikes: minLikes || undefined,
       minImpressions: minImpressions || undefined,
     });
+  }
+
+  // --quality: post-hoc filter for min 10 likes (min_faves operator unavailable on Basic tier)
+  if (quality) {
+    tweets = api.filterEngagement(tweets, { minLikes: 10 });
   }
 
   // Sort
@@ -169,10 +201,19 @@ async function cmdSearch() {
     console.error(`\nSaved to ${path}`);
   }
 
+  // Cost display (based on raw API reads, not post-filter count)
+  const cost = (rawTweetCount * 0.005).toFixed(2);
+  if (quick) {
+    console.error(`\n⚡ quick mode · ${rawTweetCount} tweets read (~$${cost})`);
+  } else {
+    console.error(`\n📊 ${rawTweetCount} tweets read · est. cost ~$${cost}`);
+  }
+
   // Stats to stderr
+  const filtered = rawTweetCount !== tweets.length ? ` → ${tweets.length} after filters` : "";
   const sinceLabel = since ? ` | since ${since}` : "";
   console.error(
-    `\n${tweets.length} tweets | sorted by ${sortOpt} | ${pages} page(s)${sinceLabel}`
+    `${rawTweetCount} tweets${filtered} | sorted by ${sortOpt} | ${pages} page(s)${sinceLabel}`
   );
 }
 
@@ -356,6 +397,10 @@ Search options:
   --min-impressions N        Filter minimum impressions
   --pages N                  Pages to fetch, 1-5 (default: 1)
   --limit N                  Results to display (default: 15)
+  --quick                    Quick mode: 1 page, max 10 results, auto noise
+                             filter, 1hr cache TTL, cost summary
+  --from <username>          Shorthand for from:username in query
+  --quality                  Pre-filter low-engagement tweets (min_faves:10)
   --no-replies               Exclude replies
   --save                     Save to ~/clawd/drafts/
   --json                     Raw JSON output
