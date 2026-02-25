@@ -9,14 +9,14 @@ description: >
   "/x-research", (2) user is working on something where recent X discourse would provide
   useful context (new library releases, API changes, product launches, cultural events,
   industry drama), (3) user wants to find what devs/experts/community thinks about a topic.
-  NOT for: posting tweets or account management. Note: currently uses recent search (last 7 days). Full-archive search is available on the same pay-per-use X API plan but not yet implemented in this skill.
+  NOT for: posting tweets or account management. Uses twitterapi.io (third-party API) for full-archive search — not limited to 7 days.
 ---
 
 # X Research
 
 General-purpose agentic research over X/Twitter. Decompose any research question into targeted searches, iteratively refine, follow threads, deep-dive linked content, and synthesize into a sourced briefing.
 
-For X API details (endpoints, operators, response format): read `references/x-api.md`.
+For twitterapi.io API details (endpoints, operators, response format): read `references/x-api.md`.
 
 ## CLI Tool
 
@@ -24,7 +24,7 @@ All commands run from this skill directory:
 
 ```bash
 cd ~/clawd/skills/x-research
-source ~/.config/env/global.env
+source ~/.config/env/global.env  # needs TWITTERAPI_IO_KEY
 ```
 
 ### Search
@@ -38,7 +38,7 @@ bun run x-search.ts search "<query>" [options]
 - `--since 1h|3h|12h|1d|7d` — time filter (default: last 7 days). Also accepts minutes (`30m`) or ISO timestamps.
 - `--min-likes N` — filter by minimum likes
 - `--min-impressions N` — filter by minimum impressions
-- `--pages N` — pages to fetch, 1-5 (default: 1, 100 tweets/page)
+- `--pages N` — pages to fetch, 1-25 (default: 5, ~20 tweets/page)
 - `--limit N` — max results to display (default: 15)
 - `--quick` — quick mode: 1 page, max 10 results, auto noise filter (`-is:retweet -is:reply`), 1hr cache, cost summary
 - `--from <username>` — shorthand for `from:username` in query
@@ -49,6 +49,8 @@ bun run x-search.ts search "<query>" [options]
 - `--markdown` — markdown output for research docs
 
 Auto-adds `-is:retweet` unless query already includes it. All searches display estimated API cost.
+
+**Note:** twitterapi.io search covers full archive (not limited to 7 days). Time filtering uses `since:` operator in the query.
 
 **Examples:**
 ```bash
@@ -179,12 +181,12 @@ skills/x-research/
 ├── SKILL.md           (this file)
 ├── x-search.ts        (CLI entry point)
 ├── lib/
-│   ├── api.ts         (X API wrapper: search, thread, profile, tweet)
+│   ├── api.ts         (twitterapi.io wrapper: search, thread, profile, tweet)
 │   ├── cache.ts       (file-based cache, 15min TTL)
 │   └── format.ts      (Telegram + markdown formatters)
 ├── data/
 │   ├── watchlist.json  (accounts to monitor)
 │   └── cache/          (auto-managed)
 └── references/
-    └── x-api.md        (X API endpoint reference)
+    └── x-api.md        (twitterapi.io endpoint reference)
 ```

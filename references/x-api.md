@@ -1,41 +1,34 @@
-# X API Reference
+# twitterapi.io API Reference
+
+Third-party Twitter/X API via [twitterapi.io](https://twitterapi.io). Full-archive access, no official X developer account required.
 
 ## Authentication
 
-Bearer token from env var `X_BEARER_TOKEN`.
+API key from env var `TWITTERAPI_IO_KEY`.
 
 ```
--H "Authorization: Bearer $X_BEARER_TOKEN"
+-H "x-api-key: $TWITTERAPI_IO_KEY"
 ```
 
-## Search Endpoints
+Get your API key from the [twitterapi.io Dashboard](https://twitterapi.io).
 
-### Recent Search (last 7 days)
+## Search Endpoint
+
+### Advanced Search (full archive)
 ```
-GET https://api.x.com/2/tweets/search/recent
+GET https://api.twitterapi.io/twitter/tweet/advanced_search
 ```
-Covers last 7 days. Max 100 results per request. Available to all developers.
+Full-archive search (not limited to 7 days). Up to 20 tweets per page. Uses the same query operators as Twitter's native advanced search.
 
-### Full-Archive Search (all time, back to March 2006)
-```
-GET https://api.x.com/2/tweets/search/all
-```
-Searches the complete Post archive. Max 500 results per request. Available on **pay-per-use** (same credits as recent search) and Enterprise. Same query operators, same response format. 1,024-char query length (vs 512 for recent).
+**Parameters:**
+- `query` (required) — Search query string (supports Twitter advanced search operators)
+- `queryType` (required) — `"Latest"` (by recency) or `"Top"` (by relevance)
+- `cursor` — Pagination cursor. Empty string or omit for first page.
 
-**Note:** This skill currently only uses recent search. Full-archive is available on the same pay-per-use plan — no enterprise access required.
-
-### Standard Query Params
-
-```
-tweet.fields=created_at,public_metrics,author_id,conversation_id,entities
-expansions=author_id
-user.fields=username,name,public_metrics
-max_results=100
-```
-
-Add `sort_order=relevancy` for relevance ranking (default is recency).
-
-Paginate with `next_token` from response `meta.next_token`.
+**Query examples:**
+- `"AI" OR "Twitter" from:elonmusk`
+- `crypto lang:en since:2024-01-01_00:00:00_UTC`
+- More operators: https://github.com/igorbrigadir/twitter-advanced-search
 
 ### Search Operators
 
@@ -52,115 +45,173 @@ Paginate with `next_token` from response `meta.next_token`.
 | `lang:` | `lang:en` | BCP-47 language code |
 | `is:retweet` | `-is:retweet` | Filter retweets |
 | `is:reply` | `-is:reply` | Filter replies |
-| `is:quote` | `is:quote` | Quote tweets |
 | `has:media` | `has:media` | Contains media |
 | `has:links` | `has:links` | Contains links |
-| `url:` | `url:github.com` | Links to domain |
-| `conversation_id:` | `conversation_id:123` | Thread by root tweet ID |
-| `place_country:` | `place_country:US` | Country filter |
+| `since:` | `since:2024-01-01_00:00:00_UTC` | Start date (in query) |
+| `until:` | `until:2024-12-31_23:59:59_UTC` | End date (in query) |
 
-**Not available as search operators:** `min_likes`, `min_retweets`, `min_replies`. Filter engagement post-hoc from `public_metrics`.
-
-**Limits:** Max query length 512 chars for recent search, 1,024 for full-archive (4,096 for Enterprise).
+**Not available as search operators:** `min_likes`, `min_retweets`, `min_replies`. Filter engagement post-hoc from tweet metrics.
 
 ### Response Structure
 
 ```json
 {
-  "data": [{
+  "tweets": [{
+    "type": "tweet",
     "id": "tweet_id",
+    "url": "https://x.com/username/status/tweet_id",
     "text": "...",
-    "author_id": "user_id",
-    "created_at": "2026-...",
-    "conversation_id": "root_tweet_id",
-    "public_metrics": {
-      "retweet_count": 0,
-      "reply_count": 0,
-      "like_count": 0,
-      "quote_count": 0,
-      "bookmark_count": 0,
-      "impression_count": 0
+    "retweetCount": 0,
+    "replyCount": 0,
+    "likeCount": 0,
+    "quoteCount": 0,
+    "viewCount": 0,
+    "bookmarkCount": 0,
+    "createdAt": "Tue Dec 10 07:00:30 +0000 2024",
+    "lang": "en",
+    "isReply": false,
+    "conversationId": "root_tweet_id",
+    "author": {
+      "type": "user",
+      "userName": "handle",
+      "id": "user_id",
+      "name": "Display Name",
+      "isBlueVerified": true,
+      "followers": 1000,
+      "following": 500,
+      "description": "..."
     },
     "entities": {
       "urls": [{"expanded_url": "https://..."}],
-      "mentions": [{"username": "..."}],
-      "hashtags": [{"tag": "..."}]
+      "mentions": [{"userName": "..."}],
+      "hashtags": [{"text": "..."}]
     }
   }],
-  "includes": {
-    "users": [{"id": "user_id", "username": "handle", "name": "Display Name", "public_metrics": {...}}]
-  },
-  "meta": {"next_token": "...", "result_count": 100}
+  "has_next_page": true,
+  "next_cursor": "cursor_string"
 }
 ```
 
 ### Constructing Tweet URLs
 
+Tweet URLs are included directly in the response as the `url` field. Format:
 ```
 https://x.com/{username}/status/{tweet_id}
 ```
-
-Both values available from response data + user expansions.
 
 ### Linked Content
 
 External URLs from tweets are in `entities.urls[].expanded_url`. Use WebFetch to deep-dive into linked pages (GitHub READMEs, blog posts, docs, etc.).
 
-### Rate Limits
+## Tweet Endpoints
 
-With pay-per-use pricing (Feb 2026+), rate limits are primarily controlled by spending limits you set in the Developer Console, not fixed per-window caps. The old 450/300 requests-per-15-min limits from the subscription model may no longer apply. If you hit a 429 error, the `x-rate-limit-reset` header tells you when to retry.
+### Get Tweets by IDs
+```
+GET https://api.twitterapi.io/twitter/tweets?tweet_ids=ID1,ID2,ID3
+```
+Batch fetch tweets by comma-separated IDs. Same tweet schema as search.
 
-The skill uses a 350ms delay between requests as a safety buffer.
+**Response:** `{ "tweets": [...], "status": "success", "message": "" }`
 
-### Cost (Pay-Per-Use — Updated Feb 2026)
+### Get Tweet Thread Context
+```
+GET https://api.twitterapi.io/twitter/tweet/thread_context?tweetId=ID
+```
+Returns the full thread context for a tweet — ancestors and descendants. Paginate via `cursor`.
 
-X API uses **pay-per-use pricing** with prepaid credits. No subscriptions, no monthly caps.
+**Response:** `{ "replies": [...], "has_next_page": true, "next_cursor": "..." }`
+
+**Note:** Page size is variable (Twitter platform limitation). `has_next_page` may return true even when no more data exists.
+
+### Get Tweet Replies
+```
+GET https://api.twitterapi.io/twitter/tweet/replies?tweetId=ID
+```
+Up to 20 replies per page, ordered by reply time desc.
+
+### Get Tweet Quotations
+```
+GET https://api.twitterapi.io/twitter/tweet/quotes?tweetId=ID
+```
+Up to 20 quotes per page, ordered by quote time desc.
+
+## User Endpoints
+
+### Get User Info
+```
+GET https://api.twitterapi.io/twitter/user/info?userName=handle
+```
+Returns user profile by screen name.
+
+**Response:**
+```json
+{
+  "data": {
+    "type": "user",
+    "userName": "handle",
+    "id": "user_id",
+    "name": "Display Name",
+    "isBlueVerified": true,
+    "description": "...",
+    "followers": 1000,
+    "following": 500,
+    "statusesCount": 5000,
+    "favouritesCount": 10000,
+    "createdAt": "Thu Dec 13 08:41:26 +0000 2007"
+  },
+  "status": "success",
+  "msg": ""
+}
+```
+
+### Get User Last Tweets
+```
+GET https://api.twitterapi.io/twitter/user/last_tweets?userName=handle
+```
+Recent tweets sorted by creation time. 20 per page.
+
+**Parameters:**
+- `userName` — Screen name (or use `userId` instead)
+- `includeReplies` — `true` or `false` (default: `false`)
+- `cursor` — Pagination cursor
+
+**Response:** `{ "tweets": [...], "has_next_page": true, "next_cursor": "..." }`
+
+## Rate Limits
+
+twitterapi.io supports up to **200 QPS** per client. No per-window rate limits like the official API. If you hit a 429 error, back off briefly and retry.
+
+The skill uses a 200ms delay between requests as a safety buffer.
+
+## Cost (twitterapi.io Pricing)
+
+twitterapi.io uses **pay-per-use pricing** with prepaid credits.
 
 **Per-resource costs:**
 | Resource | Cost |
 |----------|------|
-| Post read | $0.005 |
-| User lookup | $0.010 |
-| Post create | $0.010 |
+| Tweet read (search/lookup) | $0.15 / 1,000 tweets |
+| User profile lookup | $0.18 / 1,000 profiles |
+| Followers/followings | $0.15 / 1,000 |
+| Minimum per request | $0.00015 (even if no data) |
 
-A typical research session: 5 queries × 100 tweets = 500 post reads = ~$2.50.
+A typical research session: 5 queries × 5 pages × 20 tweets = 500 tweet reads = ~$0.075.
 
-**24-hour deduplication:** Same post requested multiple times within a UTC day = 1 charge. Re-running the same search within 24h costs significantly less.
+**Search cost:** Each search page returns up to 20 tweets = ~$0.003/page.
 
-**Billing details:**
-- Purchase credits upfront at [console.x.com](https://console.x.com)
-- Set auto-recharge (trigger amount + threshold) to avoid interruptions
-- Set spending limits per billing cycle
-- Failed requests are not billed
-- Streaming (Filtered Stream): each unique post delivered counts, with 24h dedup
+| Operation | Est. cost |
+|-----------|-----------|
+| Quick search (1 page, ≤20 tweets) | ~$0.003 |
+| Standard search (5 pages, ~100 tweets) | ~$0.015 |
+| Deep research (15 pages, ~300 tweets) | ~$0.045 |
+| Profile check (user + 20 tweets) | ~$0.003 |
+| Watchlist check (5 accounts) | ~$0.015 |
+| Cached repeat (any) | free |
 
-**Usage monitoring endpoint:**
-```
-GET https://api.x.com/2/usage/tweets
-Authorization: Bearer $BEARER_TOKEN
-```
-Returns daily post consumption counts per app. Use for budget tracking and alerts.
+**How x-search saves money:**
+- Cache (15min default, 1hr in quick mode) — repeat queries are free
+- Quick mode prevents accidental multi-page fetches
+- Cost displayed after every search so you know what you're spending
+- `--from` targets specific users instead of broad searches
 
-**xAI credit bonus:**
-| Cumulative spend (per cycle) | xAI credit rate |
-|------------------------------|-----------------|
-| $0 – $199 | 0% |
-| $200 – $499 | 10% |
-| $500 – $999 | 15% |
-| $1,000+ | 20% |
-
-Credits are rolling — order/size of purchases doesn't affect total rewards.
-
-**Tracked endpoints (all count toward usage):**
-- Post lookup, Recent search, Full-archive search
-- Filtered stream, Filtered stream webhooks
-- User posts/mentions timelines
-- Liked posts, Bookmarks, List posts, Spaces lookup
-
-## Single Tweet Lookup
-
-```
-GET https://api.x.com/2/tweets/{id}
-```
-
-Same fields/expansions params. Use for fetching specific tweets by ID.
+**Special offer:** Discounted rates for students and research institutions.

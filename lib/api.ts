@@ -1,16 +1,17 @@
 /**
  * X API wrapper — search, threads, profiles, single tweets.
- * Uses Bearer token from env: X_BEARER_TOKEN
+ * Uses twitterapi.io (third-party) instead of the official X API.
+ * Requires API key from env: TWITTERAPI_IO_KEY
  */
 
 import { readFileSync } from "fs";
 
-const BASE = "https://api.x.com/2";
-const RATE_DELAY_MS = 350; // stay under 450 req/15min
+const BASE = "https://api.twitterapi.io";
+const RATE_DELAY_MS = 200; // twitterapi.io supports up to 200 QPS
 
-function getToken(): string {
+function getApiKey(): string {
   // Try env first
-  if (process.env.X_BEARER_TOKEN) return process.env.X_BEARER_TOKEN;
+  if (process.env.TWITTERAPI_IO_KEY) return process.env.TWITTERAPI_IO_KEY;
 
   // Try global.env
   try {
@@ -18,12 +19,12 @@ function getToken(): string {
       `${process.env.HOME}/.config/env/global.env`,
       "utf-8"
     );
-    const match = envFile.match(/X_BEARER_TOKEN=["']?([^"'\n]+)/);
+    const match = envFile.match(/TWITTERAPI_IO_KEY=["']?([^"'\n]+)/);
     if (match) return match[1];
   } catch {}
 
   throw new Error(
-    "X_BEARER_TOKEN not found in env or ~/.config/env/global.env"
+    "TWITTERAPI_IO_KEY not found in env or ~/.config/env/global.env"
   );
 }
 
@@ -53,65 +54,67 @@ export interface Tweet {
   tweet_url: string;
 }
 
-interface RawResponse {
-  data?: any[];
-  includes?: { users?: any[] };
-  meta?: { next_token?: string; result_count?: number };
-  errors?: any[];
-  title?: string;
-  detail?: string;
-  status?: number;
+/**
+ * Parse a twitterapi.io date string ("Tue Dec 10 07:00:30 +0000 2024")
+ * into an ISO 8601 string for internal consistency.
+ */
+function parseTwitterDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  } catch {}
+  return dateStr; // fallback: return as-is
 }
-
-function parseTweets(raw: RawResponse): Tweet[] {
-  if (!raw.data) return [];
-  const users: Record<string, any> = {};
-  for (const u of raw.includes?.users || []) {
-    users[u.id] = u;
-  }
-
-  return raw.data.map((t: any) => {
-    const u = users[t.author_id] || {};
-    const m = t.public_metrics || {};
-    return {
-      id: t.id,
-      text: t.text,
-      author_id: t.author_id,
-      username: u.username || "?",
-      name: u.name || "?",
-      created_at: t.created_at,
-      conversation_id: t.conversation_id,
-      metrics: {
-        likes: m.like_count || 0,
-        retweets: m.retweet_count || 0,
-        replies: m.reply_count || 0,
-        quotes: m.quote_count || 0,
-        impressions: m.impression_count || 0,
-        bookmarks: m.bookmark_count || 0,
-      },
-      urls: (t.entities?.urls || [])
-        .map((u: any) => u.expanded_url)
-        .filter(Boolean),
-      mentions: (t.entities?.mentions || [])
-        .map((m: any) => m.username)
-        .filter(Boolean),
-      hashtags: (t.entities?.hashtags || [])
-        .map((h: any) => h.tag)
-        .filter(Boolean),
-      tweet_url: `https://x.com/${u.username || "?"}/status/${t.id}`,
-    };
-  });
-}
-
-const FIELDS =
-  "tweet.fields=created_at,public_metrics,author_id,conversation_id,entities&expansions=author_id&user.fields=username,name,public_metrics";
 
 /**
- * Parse a "since" value into an ISO 8601 timestamp.
+ * Parse a single raw tweet from twitterapi.io into our internal Tweet format.
+ * twitterapi.io returns flat tweet objects with an embedded `author` field.
+ */
+function parseTweet(t: any): Tweet {
+  const author = t.author || {};
+  return {
+    id: t.id || "",
+    text: t.text || "",
+    author_id: author.id || "",
+    username: author.userName || "?",
+    name: author.name || "?",
+    created_at: parseTwitterDate(t.createdAt || ""),
+    conversation_id: t.conversationId || "",
+    metrics: {
+      likes: t.likeCount || 0,
+      retweets: t.retweetCount || 0,
+      replies: t.replyCount || 0,
+      quotes: t.quoteCount || 0,
+      impressions: t.viewCount || 0,
+      bookmarks: t.bookmarkCount || 0,
+    },
+    urls: (t.entities?.urls || [])
+      .map((u: any) => u.expanded_url || u.url)
+      .filter(Boolean),
+    mentions: (t.entities?.mentions || [])
+      .map((m: any) => m.username || m.userName)
+      .filter(Boolean),
+    hashtags: (t.entities?.hashtags || [])
+      .map((h: any) => h.tag || h.text)
+      .filter(Boolean),
+    tweet_url: t.url || `https://x.com/${author.userName || "?"}/status/${t.id}`,
+  };
+}
+
+function parseTweets(rawTweets: any[]): Tweet[] {
+  if (!rawTweets || !Array.isArray(rawTweets)) return [];
+  return rawTweets.map(parseTweet);
+}
+
+/**
+ * Parse a "since" value into the twitterapi.io query format.
  * Accepts: "1h", "2h", "6h", "12h", "1d", "2d", "3d", "7d"
  * Or a raw ISO 8601 string.
+ * Returns a string like "since:2024-12-10_07:00:30_UTC" for query embedding.
  */
 function parseSince(since: string): string | null {
+  let date: Date | null = null;
+
   // Check for shorthand like "1h", "3h", "1d"
   const match = since.match(/^(\d+)(m|h|d)$/);
   if (match) {
@@ -121,87 +124,94 @@ function parseSince(since: string): string | null {
       unit === "m" ? num * 60_000 :
       unit === "h" ? num * 3_600_000 :
       num * 86_400_000;
-    const startTime = new Date(Date.now() - ms);
-    return startTime.toISOString();
+    date = new Date(Date.now() - ms);
   }
 
   // Check if it's already ISO 8601
-  if (since.includes("T") || since.includes("-")) {
+  if (!date && (since.includes("T") || since.includes("-"))) {
     try {
-      return new Date(since).toISOString();
+      date = new Date(since);
+      if (isNaN(date.getTime())) date = null;
     } catch {
-      return null;
+      date = null;
     }
   }
 
-  return null;
+  if (!date) return null;
+
+  // Format as "YYYY-MM-DD_HH:MM:SS_UTC" for twitterapi.io query operator
+  const y = date.getUTCFullYear();
+  const mo = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  const h = String(date.getUTCHours()).padStart(2, "0");
+  const mi = String(date.getUTCMinutes()).padStart(2, "0");
+  const s = String(date.getUTCSeconds()).padStart(2, "0");
+  return `since:${y}-${mo}-${d}_${h}:${mi}:${s}_UTC`;
 }
 
-async function apiGet(url: string): Promise<RawResponse> {
-  const token = getToken();
+async function apiGet(path: string, params: Record<string, string> = {}): Promise<any> {
+  const apiKey = getApiKey();
+  const qs = new URLSearchParams(params).toString();
+  const url = `${BASE}${path}${qs ? `?${qs}` : ""}`;
+
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { "x-api-key": apiKey },
   });
 
   if (res.status === 429) {
-    const reset = res.headers.get("x-rate-limit-reset");
-    const waitSec = reset
-      ? Math.max(parseInt(reset) - Math.floor(Date.now() / 1000), 1)
-      : 60;
-    throw new Error(`Rate limited. Resets in ${waitSec}s`);
+    throw new Error("Rate limited by twitterapi.io. Try again shortly.");
   }
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`X API ${res.status}: ${body.slice(0, 200)}`);
+    throw new Error(`twitterapi.io ${res.status}: ${body.slice(0, 200)}`);
   }
 
   return res.json();
 }
 
 /**
- * Search recent tweets (last 7 days).
- * Note: Full-archive search (/2/tweets/search/all) is available on the same
- * pay-per-use plan (no enterprise required) but not yet implemented here.
+ * Search tweets via twitterapi.io Advanced Search.
+ * Uses the same query operators as Twitter's native advanced search.
+ * Each page returns up to 20 tweets. No time-range limit (full archive).
  */
 export async function search(
   query: string,
   opts: {
-    maxResults?: number;
+    maxResults?: number; // ignored (page size fixed at ~20 by twitterapi.io)
     pages?: number;
     sortOrder?: "relevancy" | "recency";
-    since?: string; // ISO 8601 timestamp or shorthand like "1h", "3h", "1d"
+    since?: string; // shorthand like "1h", "3h", "1d" or ISO 8601
   } = {}
 ): Promise<Tweet[]> {
-  const maxResults = Math.max(Math.min(opts.maxResults || 100, 100), 10);
   const pages = opts.pages || 1;
-  const sort = opts.sortOrder || "relevancy";
-  const encoded = encodeURIComponent(query);
+  const queryType = opts.sortOrder === "recency" ? "Latest" : "Top";
 
-  // Build time filter
-  let timeFilter = "";
+  // Embed since as a query operator if provided
+  let fullQuery = query;
   if (opts.since) {
-    const startTime = parseSince(opts.since);
-    if (startTime) {
-      timeFilter = `&start_time=${startTime}`;
+    const sinceOp = parseSince(opts.since);
+    if (sinceOp && !query.includes("since:")) {
+      fullQuery += ` ${sinceOp}`;
     }
   }
 
   let allTweets: Tweet[] = [];
-  let nextToken: string | undefined;
+  let cursor = "";
 
   for (let page = 0; page < pages; page++) {
-    const pagination = nextToken
-      ? `&pagination_token=${nextToken}`
-      : "";
-    const url = `${BASE}/tweets/search/recent?query=${encoded}&max_results=${maxResults}&${FIELDS}&sort_order=${sort}${timeFilter}${pagination}`;
+    const params: Record<string, string> = {
+      query: fullQuery,
+      queryType,
+    };
+    if (cursor) params.cursor = cursor;
 
-    const raw = await apiGet(url);
-    const tweets = parseTweets(raw);
+    const raw = await apiGet("/twitter/tweet/advanced_search", params);
+    const tweets = parseTweets(raw.tweets);
     allTweets.push(...tweets);
 
-    nextToken = raw.meta?.next_token;
-    if (!nextToken) break;
+    if (!raw.has_next_page || !raw.next_cursor) break;
+    cursor = raw.next_cursor;
     if (page < pages - 1) await sleep(RATE_DELAY_MS);
   }
 
@@ -209,77 +219,96 @@ export async function search(
 }
 
 /**
- * Fetch a full conversation thread by root tweet ID.
+ * Fetch a full conversation thread by tweet ID.
+ * Uses the dedicated thread_context endpoint.
  */
 export async function thread(
-  conversationId: string,
+  tweetId: string,
   opts: { pages?: number } = {}
 ): Promise<Tweet[]> {
-  const query = `conversation_id:${conversationId}`;
-  const tweets = await search(query, {
-    pages: opts.pages || 2,
-    sortOrder: "recency",
-  });
+  const pages = opts.pages || 2;
+  let allTweets: Tweet[] = [];
+  let cursor = "";
 
-  // Also fetch the root tweet
-  try {
-    const rootUrl = `${BASE}/tweets/${conversationId}?${FIELDS}`;
-    const raw = await apiGet(rootUrl);
-    const rootTweets = parseTweets({ ...raw, data: raw.data ? [raw.data] : (raw as any).id ? [raw] : [] });
-    // Fix: single tweet lookup returns tweet at top level
-    if ((raw as any).id) {
-      // raw is the tweet itself — need to re-fetch with proper structure
-    }
-    if (rootTweets.length > 0) {
-      tweets.unshift(...rootTweets);
-    }
-  } catch {
-    // Root tweet might be deleted
+  for (let page = 0; page < pages; page++) {
+    const params: Record<string, string> = { tweetId };
+    if (cursor) params.cursor = cursor;
+
+    const raw = await apiGet("/twitter/tweet/thread_context", params);
+    const tweets = parseTweets(raw.replies);
+    allTweets.push(...tweets);
+
+    if (!raw.has_next_page || !raw.next_cursor) break;
+    cursor = raw.next_cursor;
+    if (page < pages - 1) await sleep(RATE_DELAY_MS);
   }
 
-  return tweets;
+  return allTweets;
 }
 
 /**
  * Get recent tweets from a specific user.
+ * Uses the dedicated last_tweets endpoint instead of search.
  */
 export async function profile(
   username: string,
   opts: { count?: number; includeReplies?: boolean } = {}
 ): Promise<{ user: any; tweets: Tweet[] }> {
-  // First, look up user ID
-  const userUrl = `${BASE}/users/by/username/${username}?user.fields=public_metrics,description,created_at`;
-  const userData = await apiGet(userUrl);
-  
-  if (!userData.data) {
+  // Fetch user info
+  const userRaw = await apiGet("/twitter/user/info", { userName: username });
+
+  if (!userRaw.data || userRaw.status === "error") {
     throw new Error(`User @${username} not found`);
   }
 
-  const user = (userData as any).data;
+  const user = userRaw.data;
+  // Normalize user fields to match format expected by formatters
+  user.username = user.userName;
+  user.public_metrics = {
+    followers_count: user.followers || 0,
+    following_count: user.following || 0,
+    tweet_count: user.statusesCount || 0,
+    like_count: user.favouritesCount || 0,
+  };
+
   await sleep(RATE_DELAY_MS);
 
-  // Build search query
-  const replyFilter = opts.includeReplies ? "" : " -is:reply";
-  const query = `from:${username} -is:retweet${replyFilter}`;
-  const tweets = await search(query, {
-    maxResults: Math.min(opts.count || 20, 100),
-    sortOrder: "recency",
-  });
+  // Fetch recent tweets using last_tweets endpoint
+  const count = opts.count || 20;
+  const pagesToFetch = Math.ceil(count / 20); // 20 tweets per page
+  let allTweets: Tweet[] = [];
+  let cursor = "";
 
-  return { user, tweets };
+  for (let page = 0; page < pagesToFetch; page++) {
+    const params: Record<string, string> = {
+      userName: username,
+      includeReplies: String(opts.includeReplies || false),
+    };
+    if (cursor) params.cursor = cursor;
+
+    const raw = await apiGet("/twitter/user/last_tweets", params);
+    const tweets = parseTweets(raw.tweets);
+    allTweets.push(...tweets);
+
+    if (!raw.has_next_page || !raw.next_cursor) break;
+    cursor = raw.next_cursor;
+    if (page < pagesToFetch - 1) await sleep(RATE_DELAY_MS);
+  }
+
+  // Trim to requested count
+  allTweets = allTweets.slice(0, count);
+
+  return { user, tweets: allTweets };
 }
 
 /**
  * Fetch a single tweet by ID.
  */
 export async function getTweet(tweetId: string): Promise<Tweet | null> {
-  const url = `${BASE}/tweets/${tweetId}?${FIELDS}`;
-  const raw = await apiGet(url);
+  const raw = await apiGet("/twitter/tweets", { tweet_ids: tweetId });
 
-  // Single tweet returns { data: {...}, includes: {...} }
-  if (raw.data && !Array.isArray(raw.data)) {
-    const parsed = parseTweets({ ...raw, data: [raw.data] });
-    return parsed[0] || null;
+  if (raw.tweets && raw.tweets.length > 0) {
+    return parseTweet(raw.tweets[0]);
   }
   return null;
 }
