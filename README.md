@@ -4,7 +4,7 @@ X/Twitter research agent for [Claude Code](https://code.claude.com) and [OpenCla
 
 ## What it does
 
-Wraps the X API into a fast CLI so your AI agent (or you) can search tweets, pull threads, monitor accounts, and get sourced research without writing curl commands.
+Wraps the [twitterapi.io](https://twitterapi.io) third-party Twitter API into a fast CLI so your AI agent (or you) can search tweets, pull threads, monitor accounts, and get sourced research without writing curl commands. Full-archive search (not limited to 7 days), no official X developer account required.
 
 - **Search** with engagement sorting, time filtering, noise removal
 - **Quick mode** for cheap, targeted lookups
@@ -32,14 +32,14 @@ git clone https://github.com/rohunvora/x-research-skill.git x-research
 
 ## Setup
 
-1. **X API Bearer Token** — Get one from the [X Developer Portal](https://developer.x.com)
+1. **twitterapi.io API Key** — Get one from the [twitterapi.io Dashboard](https://twitterapi.io)
 2. **Set the env var:**
    ```bash
-   export X_BEARER_TOKEN="your-token-here"
+   export TWITTERAPI_IO_KEY="your-api-key-here"
    ```
    Or save it to `~/.config/env/global.env`:
    ```
-   X_BEARER_TOKEN=your-token-here
+   TWITTERAPI_IO_KEY=your-api-key-here
    ```
 3. **Install Bun** (for CLI tooling): https://bun.sh
 
@@ -81,7 +81,7 @@ bun run x-search.ts search "query" --save --markdown
 --since 1h|3h|12h|1d|7d     Time filter (default: last 7 days)
 --min-likes N              Filter minimum likes
 --min-impressions N        Filter minimum impressions
---pages N                  Pages to fetch, 1-5 (default: 1, 100 tweets/page)
+--pages N                  Pages to fetch, 1-25 (default: 5, ~20 tweets/page)
 --limit N                  Results to display (default: 15)
 --quick                    Quick mode (see below)
 --from <username>          Shorthand for from:username in query
@@ -145,39 +145,34 @@ bun run x-search.ts search "crypto AI" --quality
 
 ## Cost
 
-As of February 2026, the X API uses **pay-per-use pricing** with prepaid credits. No subscriptions, no monthly caps. You buy credits in the [Developer Console](https://console.x.com) and they're deducted per request.
+This skill uses [twitterapi.io](https://twitterapi.io) — a third-party Twitter API that is **~96% cheaper** than the official X API.
 
 **Per-resource costs:**
 | Resource | Cost |
 |----------|------|
-| Post read | $0.005 |
-| User lookup | $0.010 |
-| Post create | $0.010 |
+| Tweet read (search/lookup) | $0.15 / 1,000 tweets |
+| User profile lookup | $0.18 / 1,000 profiles |
+| Followers/followings | $0.15 / 1,000 |
+| Minimum per request | $0.00015 (even if no data) |
 
-**Search cost:** Each search page returns up to 100 posts = ~$0.50/page.
+**Search cost:** Each search page returns up to 20 tweets = ~$0.003/page.
 
 | Operation | Est. cost |
 |-----------|-----------|
-| Quick search (1 page, ≤100 posts) | ~$0.50 |
-| Standard search (1 page) | ~$0.50 |
-| Deep research (3 pages) | ~$1.50 |
-| Profile check (user + posts) | ~$0.51 |
-| Watchlist check (5 accounts) | ~$2.55 |
+| Quick search (1 page, ≤20 tweets) | ~$0.003 |
+| Standard search (5 pages, ~100 tweets) | ~$0.015 |
+| Deep research (15 pages, ~300 tweets) | ~$0.045 |
+| Profile check (user + 20 tweets) | ~$0.003 |
+| Watchlist check (5 accounts) | ~$0.015 |
 | Cached repeat (any) | free |
-
-**24-hour deduplication:** If you request the same post twice in a UTC day, you're only charged once. This means repeat searches on the same topic within a day cost less than the estimate above.
-
-**Spending controls:** Set auto-recharge thresholds and spending limits per billing cycle in the Developer Console. Failed requests are never billed.
-
-**xAI credit bonus:** Spend $200+/cycle on X API → earn 10-20% back as xAI/Grok API credits. See [pricing docs](https://docs.x.com/x-api/getting-started/pricing).
 
 **How x-search saves money:**
 - Cache (15min default, 1hr in quick mode) — repeat queries are free
-- 24-hour dedup means re-running the same search costs $0 at API level too
 - Quick mode prevents accidental multi-page fetches
 - Cost displayed after every search so you know what you're spending
 - `--from` targets specific users instead of broad searches
-- Monitor your usage programmatically: `GET /2/usage/tweets`
+
+**Special offer:** Discounted rates for students and research institutions.
 
 ## File structure
 
@@ -186,7 +181,7 @@ x-research/
 ├── SKILL.md              # Agent instructions (Claude reads this)
 ├── x-search.ts           # CLI entry point
 ├── lib/
-│   ├── api.ts            # X API wrapper
+│   ├── api.ts            # twitterapi.io wrapper
 │   ├── cache.ts          # File-based cache
 │   └── format.ts         # Telegram + markdown formatters
 └── data/
@@ -196,22 +191,21 @@ x-research/
 
 ## Security
 
-**Bearer token handling:** x-search reads your token from the `X_BEARER_TOKEN` env var or `~/.config/env/global.env`. The token is never printed to stdout, but be aware:
+**API key handling:** x-search reads your key from the `TWITTERAPI_IO_KEY` env var or `~/.config/env/global.env`. The key is never printed to stdout, but be aware:
 
-- **AI coding agents** (Claude Code, Codex, etc.) may log tool calls — including HTTP headers — in session transcripts. If you're running x-search inside an agent session, your bearer token could appear in those logs.
+- **AI coding agents** (Claude Code, Codex, etc.) may log tool calls — including HTTP headers — in session transcripts. If you're running x-search inside an agent session, your API key could appear in those logs.
 - **Recommendations:**
-  - Set `X_BEARER_TOKEN` as a system env var (not inline in commands)
+  - Set `TWITTERAPI_IO_KEY` as a system env var (not inline in commands)
   - Review your agent's session log settings
-  - Use a token with minimal permissions (read-only)
-  - Rotate your token if you suspect exposure
+  - Rotate your key if you suspect exposure
 
 ## Limitations
 
-- Search covers last 7 days only (uses `/2/tweets/search/recent` — the full-archive `/2/tweets/search/all` endpoint is available on the same pay-per-use plan but not yet implemented in this skill)
 - Read-only — never posts or interacts
-- Requires X API access with prepaid credits ([sign up](https://console.x.com))
+- Requires twitterapi.io API key with prepaid credits ([sign up](https://twitterapi.io))
 - `min_likes` / `min_retweets` search operators unavailable (filtered post-hoc instead)
-- Full-archive search (beyond 7 days) is available on pay-per-use (same credits). See [X API search docs](https://docs.x.com/x-api/posts/search/introduction). This skill currently only uses recent search — full-archive support coming soon.
+- Search pages return ~20 tweets (vs 100 with official API) — use more pages for larger result sets
+- Uses a third-party API — availability depends on twitterapi.io uptime
 
 ## Star History
 

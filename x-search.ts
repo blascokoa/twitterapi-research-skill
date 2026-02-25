@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * x-search — CLI for X/Twitter research.
+ * x-search — CLI for X/Twitter research (powered by twitterapi.io).
  *
  * Commands:
  *   search <query> [options]    Search recent tweets
@@ -17,7 +17,7 @@
  *   --sort likes|impressions|retweets|recent   Sort order (default: likes)
  *   --min-likes N              Filter by minimum likes
  *   --min-impressions N        Filter by minimum impressions
- *   --pages N                  Number of pages to fetch (default: 1, max 5)
+ *   --pages N                  Number of pages to fetch (default: 5, max 25, ~20 tweets/page)
  *   --no-replies               Exclude replies
  *   --no-retweets              Exclude retweets (added by default)
  *   --limit N                  Max results to display (default: 15)
@@ -90,7 +90,7 @@ async function cmdSearch() {
   const sortOpt = getOpt("sort") || "likes";
   const minLikes = parseInt(getOpt("min-likes") || "0");
   const minImpressions = parseInt(getOpt("min-impressions") || "0");
-  let pages = Math.min(parseInt(getOpt("pages") || "1"), 5);
+  let pages = Math.min(parseInt(getOpt("pages") || "5"), 25);
   let limit = parseInt(getOpt("limit") || "15");
   const since = getOpt("since");
   const noReplies = getFlag("no-replies");
@@ -201,8 +201,8 @@ async function cmdSearch() {
     console.error(`\nSaved to ${path}`);
   }
 
-  // Cost display (based on raw API reads, not post-filter count)
-  const cost = (rawTweetCount * 0.005).toFixed(2);
+  // Cost display (twitterapi.io: $0.15/1k tweets = $0.00015/tweet)
+  const cost = (rawTweetCount * 0.00015).toFixed(4);
   if (quick) {
     console.error(`\n⚡ quick mode · ${rawTweetCount} tweets read (~$${cost})`);
   } else {
@@ -377,10 +377,10 @@ async function cmdCache() {
 }
 
 function usage() {
-  console.log(`x-search — X/Twitter research CLI
+  console.log(`x-search — X/Twitter research CLI (powered by twitterapi.io)
 
 Commands:
-  search <query> [options]    Search recent tweets (last 7 days)
+  search <query> [options]    Search tweets (full archive)
   thread <tweet_id>           Fetch full conversation thread
   profile <username>          Recent tweets from a user
   tweet <tweet_id>            Fetch a single tweet
@@ -392,10 +392,10 @@ Commands:
 
 Search options:
   --sort likes|impressions|retweets|recent   (default: likes)
-  --since 1h|3h|12h|1d|7d   Time filter (default: last 7 days)
+  --since 1h|3h|12h|1d|7d   Time filter
   --min-likes N              Filter minimum likes
   --min-impressions N        Filter minimum impressions
-  --pages N                  Pages to fetch, 1-5 (default: 1)
+  --pages N                  Pages to fetch, 1-25 (default: 5, ~20/page)
   --limit N                  Results to display (default: 15)
   --quick                    Quick mode: 1 page, max 10 results, auto noise
                              filter, 1hr cache TTL, cost summary
