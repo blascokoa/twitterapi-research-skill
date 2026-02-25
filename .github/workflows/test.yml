@@ -27,7 +27,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    # Only run if the X_BEARER_TOKEN secret is available
+    # Only run if the TWITTERAPI_IO_KEY secret is available
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
@@ -41,11 +41,11 @@ jobs:
 
       - name: Run integration tests
         env:
-          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          TWITTERAPI_IO_KEY: ${{ secrets.TWITTERAPI_IO_KEY }}
         run: |
-          if [ -z "$X_BEARER_TOKEN" ]; then
-            echo "⚠️ X_BEARER_TOKEN secret not set — skipping integration tests"
-            echo "Add X_BEARER_TOKEN to repository secrets to enable integration tests"
+          if [ -z "$TWITTERAPI_IO_KEY" ]; then
+            echo "⚠️ TWITTERAPI_IO_KEY secret not set — skipping integration tests"
+            echo "Add TWITTERAPI_IO_KEY to repository secrets to enable integration tests"
             exit 0
           fi
           bun test tests/integration
