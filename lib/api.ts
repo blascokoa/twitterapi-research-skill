@@ -149,6 +149,29 @@ function parseSince(since: string): string | null {
   return `since:${y}-${mo}-${d}_${h}:${mi}:${s}_UTC`;
 }
 
+/**
+ * Parse a "since" value into a Date object for client-side filtering.
+ */
+function parseSinceDate(since: string): Date | null {
+  const match = since.match(/^(\d+)(m|h|d)$/);
+  if (match) {
+    const num = parseInt(match[1]);
+    const unit = match[2];
+    const ms =
+      unit === "m" ? num * 60_000 :
+      unit === "h" ? num * 3_600_000 :
+      num * 86_400_000;
+    return new Date(Date.now() - ms);
+  }
+  if (since.includes("T") || since.includes("-")) {
+    try {
+      const d = new Date(since);
+      if (!isNaN(d.getTime())) return d;
+    } catch {}
+  }
+  return null;
+}
+
 async function apiGet(path: string, params: Record<string, string> = {}): Promise<any> {
   const apiKey = getApiKey();
   const qs = new URLSearchParams(params).toString();
@@ -213,6 +236,17 @@ export async function search(
     if (!raw.has_next_page || !raw.next_cursor) break;
     cursor = raw.next_cursor;
     if (page < pages - 1) await sleep(RATE_DELAY_MS);
+  }
+
+  // Client-side date filtering when `since` is set, because the API
+  // since: operator occasionally lets older tweets through.
+  if (opts.since) {
+    const sinceDate = parseSinceDate(opts.since);
+    if (sinceDate) {
+      allTweets = allTweets.filter(
+        (t) => new Date(t.created_at).getTime() >= sinceDate.getTime()
+      );
+    }
   }
 
   if (opts.maxResults) {
