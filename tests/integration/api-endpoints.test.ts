@@ -1,8 +1,8 @@
 /**
  * Integration tests for X API endpoints.
- * Requires X_BEARER_TOKEN env var to be set.
+ * Requires TWITTERAPI_IO_KEY env var to be set.
  *
- * These tests hit the real X API and will consume API credits.
+ * These tests hit the real twitterapi.io API and will consume API credits.
  * Run with: bun test tests/integration
  */
 
@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll } from "bun:test";
 import { search, thread, profile, getTweet, type Tweet } from "../../lib/api";
 
 // Skip all integration tests if no API key
-const hasToken = !!process.env.X_BEARER_TOKEN;
+const hasToken = !!process.env.TWITTERAPI_IO_KEY;
 
 describe.skipIf(!hasToken)("API Integration: search", () => {
   it("returns tweets for a common query", async () => {
