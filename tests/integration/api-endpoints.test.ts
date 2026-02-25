@@ -69,8 +69,8 @@ describe.skipIf(!hasToken)("API Integration: search", () => {
   }, 30_000);
 
   it("supports pagination with multiple pages", async () => {
-    const singlePage = await search("technology", { maxResults: 10, pages: 1 });
-    const multiPage = await search("technology", { maxResults: 10, pages: 2 });
+    const singlePage = await search("technology", { maxResults: 10, pages: 1, sortOrder: "recency" });
+    const multiPage = await search("technology", { maxResults: 10, pages: 2, sortOrder: "recency" });
     // Multi-page should return >= single page results (if enough data exists)
     expect(multiPage.length).toBeGreaterThanOrEqual(singlePage.length);
   }, 60_000);
