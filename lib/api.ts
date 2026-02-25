@@ -178,7 +178,7 @@ async function apiGet(path: string, params: Record<string, string> = {}): Promis
 export async function search(
   query: string,
   opts: {
-    maxResults?: number; // ignored (page size fixed at ~20 by twitterapi.io)
+    maxResults?: number; // trims results to this count (page size fixed at ~20 by twitterapi.io)
     pages?: number;
     sortOrder?: "relevancy" | "recency";
     since?: string; // shorthand like "1h", "3h", "1d" or ISO 8601
@@ -213,6 +213,10 @@ export async function search(
     if (!raw.has_next_page || !raw.next_cursor) break;
     cursor = raw.next_cursor;
     if (page < pages - 1) await sleep(RATE_DELAY_MS);
+  }
+
+  if (opts.maxResults) {
+    allTweets = allTweets.slice(0, opts.maxResults);
   }
 
   return allTweets;

@@ -38,8 +38,8 @@ describe.skipIf(!hasToken)("API Integration: search", () => {
   }, 30_000);
 
   it("supports relevancy sort order", async () => {
-    const tweets = await search("technology", {
-      maxResults: 10,
+    const tweets = await search("javascript OR python", {
+      maxResults: 20,
       sortOrder: "relevancy",
     });
     expect(tweets.length).toBeGreaterThan(0);
@@ -57,6 +57,7 @@ describe.skipIf(!hasToken)("API Integration: search", () => {
     const tweets = await search("the", {
       maxResults: 10,
       since: "1d",
+      sortOrder: "recency",
     });
     expect(tweets.length).toBeGreaterThan(0);
 
