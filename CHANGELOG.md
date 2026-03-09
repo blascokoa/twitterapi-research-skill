@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.4.0 (2026-03-09)
+
+### Added — New API Endpoints
+Implemented 6 missing twitterapi.io endpoints, expanding the skill from 4 to 10 API operations.
+
+- **`tweets` command** — Fetch multiple tweets by IDs in a single batch call (`GET /twitter/tweets?tweet_ids=ID1,ID2,...`)
+- **`replies` command** — Fetch replies to a tweet using the v2 endpoint (`GET /twitter/tweet/replies`), with pagination support
+- **`quotes` command** — Fetch quote tweets for a given tweet (`GET /twitter/tweet/quotes`), with pagination support
+- **`followers` command** — Fetch verified followers for a user by user_id (`GET /twitter/user/verifiedFollowers`)
+- **`user-tweets` command** — Fetch a user's last tweets standalone, without fetching user info (`GET /twitter/user/last_tweets`)
+- **`trends` command** — Fetch trending topics by WOEID (`GET /twitter/trends`), defaults to worldwide (WOEID=1)
+- New TypeScript interfaces: `UserProfile`, `Trend`, `TrendsResult`
+- All new CLI commands support `--json` output and `--pages` pagination where applicable
+
+### Fixed
+- **`data.tweets` nesting bug** — The `last_tweets` API nests tweets inside `data.tweets`, not at the root `tweets` key. Fixed in both existing `profile()` and new `getUserLastTweets()` functions.
+- **`getApiKey()` now checks `TWITTERAPI_API_KEY`** as an alternate env var name (in addition to `TWITTERAPI_IO_KEY`)
+
+### Docs
+- **`references/x-api.md`** expanded from 218 → 377 lines — full documentation for all 6 new endpoints, CLI commands reference table, updated cost table, WOEID values for trends, and `data.tweets` nesting quirk documented
+- **`CHANGELOG.md`** updated with complete history of this release
+
+### Tests
+- 12 new integration tests covering all 6 endpoints against the live twitterapi.io API
+- Unit tests for new type interfaces and edge cases
+- All 73 tests pass (58 unit + 15 existing integration + 12 new integration), 0 failures
+
 ## v2.3.0 (2026-02-09)
 
 ### Fixed — Remove LLM Hallucinations

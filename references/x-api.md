@@ -4,7 +4,7 @@ Third-party Twitter/X API via [twitterapi.io](https://twitterapi.io). Full-archi
 
 ## Authentication
 
-API key from env var `TWITTERAPI_IO_KEY`.
+API key from env var `TWITTERAPI_IO_KEY` (or `TWITTERAPI_API_KEY`).
 
 ```
 -H "x-api-key: $TWITTERAPI_IO_KEY"
@@ -111,6 +111,9 @@ GET https://api.twitterapi.io/twitter/tweets?tweet_ids=ID1,ID2,ID3
 ```
 Batch fetch tweets by comma-separated IDs. Same tweet schema as search.
 
+**Parameters:**
+- `tweet_ids` (required) — Comma-separated tweet IDs
+
 **Response:** `{ "tweets": [...], "status": "success", "message": "" }`
 
 ### Get Tweet Thread Context
@@ -118,6 +121,10 @@ Batch fetch tweets by comma-separated IDs. Same tweet schema as search.
 GET https://api.twitterapi.io/twitter/tweet/thread_context?tweetId=ID
 ```
 Returns the full thread context for a tweet — ancestors and descendants. Paginate via `cursor`.
+
+**Parameters:**
+- `tweetId` (required) — Tweet ID
+- `cursor` — Pagination cursor
 
 **Response:** `{ "replies": [...], "has_next_page": true, "next_cursor": "..." }`
 
@@ -129,11 +136,37 @@ GET https://api.twitterapi.io/twitter/tweet/replies?tweetId=ID
 ```
 Up to 20 replies per page, ordered by reply time desc.
 
+**Parameters:**
+- `tweetId` (required) — Tweet ID
+- `cursor` — Pagination cursor
+
+**Response:**
+```json
+{
+  "tweets": [{ /* same tweet schema */ }],
+  "has_next_page": true,
+  "next_cursor": "cursor_string"
+}
+```
+
 ### Get Tweet Quotations
 ```
 GET https://api.twitterapi.io/twitter/tweet/quotes?tweetId=ID
 ```
 Up to 20 quotes per page, ordered by quote time desc.
+
+**Parameters:**
+- `tweetId` (required) — Tweet ID
+- `cursor` — Pagination cursor
+
+**Response:**
+```json
+{
+  "tweets": [{ /* same tweet schema */ }],
+  "has_next_page": true,
+  "next_cursor": "cursor_string"
+}
+```
 
 ## User Endpoints
 
@@ -142,6 +175,9 @@ Up to 20 quotes per page, ordered by quote time desc.
 GET https://api.twitterapi.io/twitter/user/info?userName=handle
 ```
 Returns user profile by screen name.
+
+**Parameters:**
+- `userName` (required) — Screen name (handle without @)
 
 **Response:**
 ```json
@@ -153,11 +189,17 @@ Returns user profile by screen name.
     "name": "Display Name",
     "isBlueVerified": true,
     "description": "...",
+    "location": "...",
     "followers": 1000,
     "following": 500,
     "statusesCount": 5000,
     "favouritesCount": 10000,
-    "createdAt": "Thu Dec 13 08:41:26 +0000 2007"
+    "mediaCount": 200,
+    "createdAt": "Thu Dec 13 08:41:26 +0000 2007",
+    "profilePicture": "https://...",
+    "coverPicture": "https://...",
+    "canDm": true,
+    "pinnedTweetIds": ["123456"]
   },
   "status": "success",
   "msg": ""
@@ -175,7 +217,99 @@ Recent tweets sorted by creation time. 20 per page.
 - `includeReplies` — `true` or `false` (default: `false`)
 - `cursor` — Pagination cursor
 
-**Response:** `{ "tweets": [...], "has_next_page": true, "next_cursor": "..." }`
+**Response:**
+```json
+{
+  "status": "success",
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "pin_tweet": null,
+    "tweets": [{ /* same tweet schema */ }]
+  },
+  "has_next_page": true,
+  "next_cursor": "cursor_string"
+}
+```
+
+**Note:** Tweets are nested inside `data.tweets`, not at the top level. Pagination fields (`has_next_page`, `next_cursor`) are at the top level.
+
+### Get Verified Followers
+```
+GET https://api.twitterapi.io/twitter/user/verifiedFollowers?user_id=USER_ID
+```
+Returns verified (blue-check) followers for a user. 20 followers per page, reverse chronological order.
+
+**Parameters:**
+- `user_id` (required) — Numeric user ID (not screen name)
+- `cursor` — Pagination cursor
+
+**Response:**
+```json
+{
+  "followers": [
+    {
+      "type": "user",
+      "userName": "handle",
+      "id": "user_id",
+      "name": "Display Name",
+      "isBlueVerified": true,
+      "description": "...",
+      "followers": 1000,
+      "following": 500,
+      "statusesCount": 5000,
+      "favouritesCount": 10000,
+      "mediaCount": 200,
+      "createdAt": "...",
+      "profilePicture": "https://...",
+      "coverPicture": "https://..."
+    }
+  ],
+  "next_cursor": "cursor_string"
+}
+```
+
+**Note:** Requires the numeric `user_id`, not the screen name. Get it from the user info endpoint first.
+
+## Trends Endpoint
+
+### Get Trending Topics
+```
+GET https://api.twitterapi.io/twitter/trends?woeid=1
+```
+Returns current trending topics for a location.
+
+**Parameters:**
+- `woeid` (required) — Yahoo Where On Earth ID. Common values:
+  - `1` — Worldwide
+  - `23424977` — United States
+  - `23424975` — United Kingdom
+  - `23424856` — Japan
+
+**Response:**
+```json
+{
+  "trends": [
+    {
+      "trend": {
+        "name": "#TrendingTopic",
+        "target": {
+          "query": "%23TrendingTopic"
+        },
+        "rank": 1
+      }
+    }
+  ],
+  "metadata": {
+    "timestamp": 1709913600,
+    "woeid": {
+      "name": "Worldwide",
+      "id": 1
+    }
+  },
+  "status": "success"
+}
+```
 
 ## Rate Limits
 
@@ -193,6 +327,7 @@ twitterapi.io uses **pay-per-use pricing** with prepaid credits.
 | Tweet read (search/lookup) | $0.15 / 1,000 tweets |
 | User profile lookup | $0.18 / 1,000 profiles |
 | Followers/followings | $0.15 / 1,000 |
+| Trends lookup | $0.15 / 1,000 |
 | Minimum per request | $0.00015 (even if no data) |
 
 A typical research session: 5 queries × 5 pages × 20 tweets = 500 tweet reads = ~$0.075.
@@ -206,6 +341,8 @@ A typical research session: 5 queries × 5 pages × 20 tweets = 500 tweet reads 
 | Deep research (15 pages, ~300 tweets) | ~$0.045 |
 | Profile check (user + 20 tweets) | ~$0.003 |
 | Watchlist check (5 accounts) | ~$0.015 |
+| Verified followers (1 page, 20 users) | ~$0.003 |
+| Trends lookup | ~$0.00015 |
 | Cached repeat (any) | free |
 
 **How x-search saves money:**
@@ -215,3 +352,25 @@ A typical research session: 5 queries × 5 pages × 20 tweets = 500 tweet reads 
 - `--from` targets specific users instead of broad searches
 
 **Special offer:** Discounted rates for students and research institutions.
+
+## CLI Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `search <query> [options]` | Full-archive tweet search |
+| `thread <tweet_id>` | Fetch full conversation thread |
+| `profile <username>` | User info + recent tweets |
+| `tweet <tweet_id>` | Fetch a single tweet |
+| `tweets <id1> <id2> ...` | Batch fetch tweets by IDs |
+| `replies <tweet_id>` | Fetch replies to a tweet |
+| `quotes <tweet_id>` | Fetch quote tweets |
+| `followers <user_id>` | Fetch verified followers |
+| `user-tweets <username>` | Fetch user's last tweets |
+| `trends [--woeid N]` | Fetch trending topics |
+| `watchlist` | Show watchlist |
+| `watchlist add <user>` | Add user to watchlist |
+| `watchlist remove <user>` | Remove user from watchlist |
+| `watchlist check` | Check recent tweets from all watchlist accounts |
+| `cache clear` | Clear search cache |
+
+**Common flags:** `--json` (raw JSON output), `--pages N` (pagination), `--limit N` (max results).

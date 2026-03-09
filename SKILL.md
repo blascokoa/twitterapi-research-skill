@@ -1,5 +1,5 @@
 ---
-name: x-research
+name: twitterapi-research
 description: >
   General-purpose X/Twitter research agent. Searches X for real-time perspectives,
   dev discussions, product feedback, cultural takes, breaking news, and expert opinions.
@@ -12,7 +12,7 @@ description: >
   NOT for: posting tweets or account management. Uses twitterapi.io (third-party API) for full-archive search — not limited to 7 days.
 ---
 
-# X Research
+# X/Twitter Research (twitterapi-research-skill)
 
 General-purpose agentic research over X/Twitter. Decompose any research question into targeted searches, iteratively refine, follow threads, deep-dive linked content, and synthesize into a sourced briefing.
 
@@ -23,8 +23,8 @@ For twitterapi.io API details (endpoints, operators, response format): read `ref
 All commands run from this skill directory:
 
 ```bash
-cd ~/clawd/skills/x-research
-source ~/.config/env/global.env  # needs TWITTERAPI_IO_KEY
+cd ~/clawd/skills/twitterapi-research-skill
+source ~/.config/env/global.env  # needs TWITTERAPI_IO_KEY or TWITTERAPI_API_KEY
 ```
 
 ### Search
@@ -84,6 +84,60 @@ Fetches full conversation thread by root tweet ID.
 ```bash
 bun run x-search.ts tweet <tweet_id> [--json]
 ```
+
+### Fetch Multiple Tweets by ID
+
+```bash
+bun run x-search.ts tweets <id1> <id2> ... [--json]
+```
+
+Fetches one or more tweets by their IDs in a single API call (comma-separated).
+
+### Tweet Replies
+
+```bash
+bun run x-search.ts replies <tweet_id> [--json]
+```
+
+Fetches replies to a specific tweet. Supports pagination via `cursor`.
+
+### Tweet Quotes
+
+```bash
+bun run x-search.ts quotes <tweet_id> [--json]
+```
+
+Fetches quote tweets of a specific tweet. Supports pagination via `cursor`.
+
+### Verified Followers
+
+```bash
+bun run x-search.ts followers <user_id> [--json]
+```
+
+Fetches verified (blue-check) followers for a user by their numeric user ID. Supports pagination via `cursor`.
+
+### User Last Tweets
+
+```bash
+bun run x-search.ts user-tweets <username> [--json]
+```
+
+Fetches a user's most recent tweets (excludes replies by default). The API nests tweets inside `data.tweets`.
+
+### Trends
+
+```bash
+bun run x-search.ts trends [--woeid N] [--json]
+```
+
+Fetches trending topics for a location. Defaults to worldwide (`--woeid 1`).
+
+Common WOEID values:
+- `1` — Worldwide
+- `23424977` — United States
+- `23424975` — United Kingdom
+- `23424856` — Japan
 
 ### Watchlist
 
@@ -177,16 +231,35 @@ On heartbeat, can run `watchlist check` to see if key accounts posted anything n
 ## File Structure
 
 ```
-skills/x-research/
+twitterapi-research-skill/
 ├── SKILL.md           (this file)
 ├── x-search.ts        (CLI entry point)
 ├── lib/
-│   ├── api.ts         (twitterapi.io wrapper: search, thread, profile, tweet)
+│   ├── api.ts         (twitterapi.io wrapper: search, thread, profile, tweet,
+│   │                   tweets, replies, quotes, followers, user-tweets, trends)
 │   ├── cache.ts       (file-based cache, 15min TTL)
 │   └── format.ts      (Telegram + markdown formatters)
 ├── data/
 │   ├── watchlist.json  (accounts to monitor)
 │   └── cache/          (auto-managed)
+├── tests/
+│   ├── unit/           (unit tests for api utils, format, cache, new endpoints)
+│   └── integration/    (live API integration tests for all endpoints)
 └── references/
-    └── x-api.md        (twitterapi.io endpoint reference)
+    └── x-api.md        (twitterapi.io endpoint reference — all endpoints documented)
 ```
+
+## API Endpoints Summary
+
+| Endpoint | CLI Command | API Function | Cost |
+|----------|-------------|--------------|------|
+| Search tweets | `search` | `search()` | 1 credit/page |
+| Get thread | `thread` | `thread()` | 1 credit/page |
+| User profile tweets | `profile` | `profile()` | 1 credit |
+| Single tweet | `tweet` | `tweet()` | 1 credit |
+| Multiple tweets by ID | `tweets` | `getTweetsByIds()` | 1 credit |
+| Tweet replies | `replies` | `getTweetReplies()` | 1 credit/page |
+| Quote tweets | `quotes` | `getTweetQuotes()` | 1 credit/page |
+| Verified followers | `followers` | `getVerifiedFollowers()` | 1 credit/page |
+| User last tweets | `user-tweets` | `getUserLastTweets()` | 1 credit |
+| Trending topics | `trends` | `getTrends()` | 1 credit |

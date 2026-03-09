@@ -7,6 +7,12 @@
  *   thread <tweet_id>           Fetch full conversation thread
  *   profile <username>          Recent tweets from a user
  *   tweet <tweet_id>            Fetch a single tweet
+ *   tweets <id1> <id2> ...      Fetch multiple tweets by IDs
+ *   replies <tweet_id>          Fetch replies to a tweet
+ *   quotes <tweet_id>           Fetch quote tweets
+ *   followers <user_id>         Fetch verified followers
+ *   user-tweets <username>      Fetch user's last tweets
+ *   trends [--woeid N]          Fetch trending topics
  *   watchlist                   Show watchlist
  *   watchlist add <user>        Add user to watchlist
  *   watchlist remove <user>     Remove user from watchlist
@@ -365,6 +371,154 @@ async function cmdWatchlist() {
   }
 }
 
+async function cmdTweets() {
+  const ids = args.slice(1).filter((a) => !a.startsWith("--"));
+  if (ids.length === 0) {
+    console.error("Usage: x-search.ts tweets <id1> <id2> ...");
+    process.exit(1);
+  }
+
+  const asJson = getFlag("json");
+  const tweets = await api.getTweetsByIds(ids);
+
+  if (tweets.length === 0) {
+    console.log("No tweets found.");
+    return;
+  }
+
+  if (asJson) {
+    console.log(JSON.stringify(tweets, null, 2));
+  } else {
+    for (const t of tweets) {
+      console.log(fmt.formatTweetTelegram(t, undefined, { full: true }));
+      console.log();
+    }
+  }
+}
+
+async function cmdReplies() {
+  const tweetId = args[1];
+  if (!tweetId) {
+    console.error("Usage: x-search.ts replies <tweet_id>");
+    process.exit(1);
+  }
+
+  const pages = Math.min(parseInt(getOpt("pages") || "1"), 5);
+  const asJson = getFlag("json");
+  const { tweets } = await api.getTweetReplies(tweetId, { pages });
+
+  if (tweets.length === 0) {
+    console.log("No replies found.");
+    return;
+  }
+
+  if (asJson) {
+    console.log(JSON.stringify(tweets, null, 2));
+  } else {
+    console.log(`💬 Replies (${tweets.length})\n`);
+    for (const t of tweets) {
+      console.log(fmt.formatTweetTelegram(t, undefined, { full: true }));
+      console.log();
+    }
+  }
+}
+
+async function cmdQuotes() {
+  const tweetId = args[1];
+  if (!tweetId) {
+    console.error("Usage: x-search.ts quotes <tweet_id>");
+    process.exit(1);
+  }
+
+  const pages = Math.min(parseInt(getOpt("pages") || "1"), 5);
+  const asJson = getFlag("json");
+  const { tweets } = await api.getTweetQuotes(tweetId, { pages });
+
+  if (tweets.length === 0) {
+    console.log("No quote tweets found.");
+    return;
+  }
+
+  if (asJson) {
+    console.log(JSON.stringify(tweets, null, 2));
+  } else {
+    console.log(`🔁 Quotes (${tweets.length})\n`);
+    for (const t of tweets) {
+      console.log(fmt.formatTweetTelegram(t, undefined, { full: true }));
+      console.log();
+    }
+  }
+}
+
+async function cmdFollowers() {
+  const userId = args[1];
+  if (!userId) {
+    console.error("Usage: x-search.ts followers <user_id>");
+    process.exit(1);
+  }
+
+  const pages = Math.min(parseInt(getOpt("pages") || "1"), 5);
+  const asJson = getFlag("json");
+  const { followers } = await api.getVerifiedFollowers(userId, { pages });
+
+  if (followers.length === 0) {
+    console.log("No verified followers found.");
+    return;
+  }
+
+  if (asJson) {
+    console.log(JSON.stringify(followers, null, 2));
+  } else {
+    console.log(`✅ Verified Followers (${followers.length})\n`);
+    for (const f of followers) {
+      console.log(`  @${f.userName} — ${f.name} (${f.followers} followers)`);
+    }
+  }
+}
+
+async function cmdUserTweets() {
+  const username = args[1]?.replace(/^@/, "");
+  if (!username) {
+    console.error("Usage: x-search.ts user-tweets <username>");
+    process.exit(1);
+  }
+
+  const count = parseInt(getOpt("count") || "20");
+  const includeReplies = getFlag("replies");
+  const asJson = getFlag("json");
+  const { tweets } = await api.getUserLastTweets(username, { count, includeReplies });
+
+  if (tweets.length === 0) {
+    console.log("No tweets found.");
+    return;
+  }
+
+  if (asJson) {
+    console.log(JSON.stringify(tweets, null, 2));
+  } else {
+    console.log(`📝 Last tweets from @${username} (${tweets.length})\n`);
+    for (const t of tweets) {
+      console.log(fmt.formatTweetTelegram(t, undefined, { full: true }));
+      console.log();
+    }
+  }
+}
+
+async function cmdTrends() {
+  const woeid = parseInt(getOpt("woeid") || "1");
+  const asJson = getFlag("json");
+  const result = await api.getTrends({ woeid });
+
+  if (asJson) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`📈 Trends — ${result.metadata.woeid.name} (${result.trends.length})\n`);
+    for (const t of result.trends) {
+      console.log(`  ${t.rank}. ${t.name}`);
+    }
+  }
+}
+
 async function cmdCache() {
   const sub = args[1];
   if (sub === "clear") {
@@ -425,6 +579,25 @@ async function main() {
       break;
     case "tweet":
       await cmdTweet();
+      break;
+    case "tweets":
+      await cmdTweets();
+      break;
+    case "replies":
+      await cmdReplies();
+      break;
+    case "quotes":
+      await cmdQuotes();
+      break;
+    case "followers":
+      await cmdFollowers();
+      break;
+    case "user-tweets":
+    case "ut":
+      await cmdUserTweets();
+      break;
+    case "trends":
+      await cmdTrends();
       break;
     case "watchlist":
     case "wl":

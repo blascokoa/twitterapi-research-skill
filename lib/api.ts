@@ -12,6 +12,7 @@ const RATE_DELAY_MS = 200; // twitterapi.io supports up to 200 QPS
 function getApiKey(): string {
   // Try env first
   if (process.env.TWITTERAPI_IO_KEY) return process.env.TWITTERAPI_IO_KEY;
+  if (process.env.TWITTERAPI_API_KEY) return process.env.TWITTERAPI_API_KEY;
 
   // Try global.env
   try {
@@ -24,7 +25,7 @@ function getApiKey(): string {
   } catch {}
 
   throw new Error(
-    "TWITTERAPI_IO_KEY not found in env or ~/.config/env/global.env"
+    "TWITTERAPI_IO_KEY / TWITTERAPI_API_KEY not found in env or ~/.config/env/global.env"
   );
 }
 
@@ -325,7 +326,9 @@ export async function profile(
     if (cursor) params.cursor = cursor;
 
     const raw = await apiGet("/twitter/user/last_tweets", params);
-    const tweets = parseTweets(raw.tweets);
+    // API nests tweets inside data.tweets or at root level
+    const rawTweets = raw.data?.tweets || raw.tweets || [];
+    const tweets = parseTweets(rawTweets);
     allTweets.push(...tweets);
 
     if (!raw.has_next_page || !raw.next_cursor) break;
@@ -349,6 +352,251 @@ export async function getTweet(tweetId: string): Promise<Tweet | null> {
     return parseTweet(raw.tweets[0]);
   }
   return null;
+}
+
+// ─── New Endpoints ───────────────────────────────────────────────
+
+export interface UserProfile {
+  type: string;
+  id: string;
+  userName: string;
+  name: string;
+  description: string;
+  location: string;
+  followers: number;
+  following: number;
+  statusesCount: number;
+  favouritesCount: number;
+  mediaCount: number;
+  isBlueVerified?: boolean;
+  createdAt: string;
+  profilePicture?: string;
+  coverPicture?: string;
+  canDm?: boolean;
+  pinnedTweetIds?: string[];
+}
+
+function parseUser(u: any): UserProfile {
+  return {
+    type: u.type || "user",
+    id: u.id || "",
+    userName: u.userName || "",
+    name: u.name || "",
+    description: u.description || "",
+    location: u.location || "",
+    followers: u.followers || 0,
+    following: u.following || 0,
+    statusesCount: u.statusesCount || 0,
+    favouritesCount: u.favouritesCount || 0,
+    mediaCount: u.mediaCount || 0,
+    isBlueVerified: u.isBlueVerified || false,
+    createdAt: u.createdAt || "",
+    profilePicture: u.profilePicture || "",
+    coverPicture: u.coverPicture || "",
+    canDm: u.canDm,
+    pinnedTweetIds: u.pinnedTweetIds || [],
+  };
+}
+
+/**
+ * Get verified followers for a user by user_id.
+ * Returns 20 verified followers per page in reverse chronological order.
+ * GET /twitter/user/verifiedFollowers?user_id=X&cursor=X
+ */
+export async function getVerifiedFollowers(
+  userId: string,
+  opts: { pages?: number } = {}
+): Promise<{ followers: UserProfile[]; nextCursor: string | null }> {
+  const pages = opts.pages || 1;
+  let allFollowers: UserProfile[] = [];
+  let cursor = "";
+  let nextCursor: string | null = null;
+
+  for (let page = 0; page < pages; page++) {
+    const params: Record<string, string> = { user_id: userId };
+    if (cursor) params.cursor = cursor;
+
+    const raw = await apiGet("/twitter/user/verifiedFollowers", params);
+    const followers = (raw.followers || []).map(parseUser);
+    allFollowers.push(...followers);
+
+    if (!raw.next_cursor) {
+      nextCursor = null;
+      break;
+    }
+    cursor = raw.next_cursor;
+    nextCursor = raw.next_cursor;
+    if (page < pages - 1) await sleep(RATE_DELAY_MS);
+  }
+
+  return { followers: allFollowers, nextCursor };
+}
+
+/**
+ * Get a user's last tweets (standalone, without fetching user info).
+ * GET /twitter/user/last_tweets?userName=X
+ */
+export async function getUserLastTweets(
+  username: string,
+  opts: { count?: number; includeReplies?: boolean; cursor?: string } = {}
+): Promise<{ tweets: Tweet[]; nextCursor: string | null }> {
+  const count = opts.count || 20;
+  // Fetch extra pages to handle empty-first-page edge case from the API
+  const maxPages = Math.ceil(count / 20) + 2;
+  let allTweets: Tweet[] = [];
+  let cursor = opts.cursor || "";
+  let nextCursor: string | null = null;
+
+  for (let page = 0; page < maxPages; page++) {
+    const params: Record<string, string> = {
+      userName: username,
+      includeReplies: String(opts.includeReplies || false),
+    };
+    if (cursor) params.cursor = cursor;
+
+    const raw = await apiGet("/twitter/user/last_tweets", params);
+    // API nests tweets inside data.tweets or at root level
+    const rawTweets = raw.data?.tweets || raw.tweets || [];
+    const tweets = parseTweets(rawTweets);
+    allTweets.push(...tweets);
+
+    if (!raw.has_next_page || !raw.next_cursor) {
+      nextCursor = null;
+      break;
+    }
+    // Stop once we have enough tweets
+    if (allTweets.length >= count) {
+      nextCursor = raw.next_cursor;
+      break;
+    }
+    cursor = raw.next_cursor;
+    nextCursor = raw.next_cursor;
+    if (page < maxPages - 1) await sleep(RATE_DELAY_MS);
+  }
+
+  allTweets = allTweets.slice(0, count);
+  return { tweets: allTweets, nextCursor };
+}
+
+/**
+ * Get replies to a tweet (v2 endpoint).
+ * GET /twitter/tweet/replies?tweetId=X
+ * Returns up to 20 replies per page, ordered by reply time desc.
+ */
+export async function getTweetReplies(
+  tweetId: string,
+  opts: { pages?: number } = {}
+): Promise<{ tweets: Tweet[]; nextCursor: string | null }> {
+  const pages = opts.pages || 1;
+  let allTweets: Tweet[] = [];
+  let cursor = "";
+  let nextCursor: string | null = null;
+
+  for (let page = 0; page < pages; page++) {
+    const params: Record<string, string> = { tweetId };
+    if (cursor) params.cursor = cursor;
+
+    const raw = await apiGet("/twitter/tweet/replies", params);
+    const tweets = parseTweets(raw.tweets);
+    allTweets.push(...tweets);
+
+    if (!raw.has_next_page || !raw.next_cursor) {
+      nextCursor = null;
+      break;
+    }
+    cursor = raw.next_cursor;
+    nextCursor = raw.next_cursor;
+    if (page < pages - 1) await sleep(RATE_DELAY_MS);
+  }
+
+  return { tweets: allTweets, nextCursor };
+}
+
+/**
+ * Fetch multiple tweets by IDs (batch).
+ * GET /twitter/tweets?tweet_ids=ID1,ID2,ID3
+ */
+export async function getTweetsByIds(tweetIds: string[]): Promise<Tweet[]> {
+  if (tweetIds.length === 0) return [];
+  const raw = await apiGet("/twitter/tweets", { tweet_ids: tweetIds.join(",") });
+  return parseTweets(raw.tweets);
+}
+
+/**
+ * Get quote tweets for a tweet.
+ * GET /twitter/tweet/quotes?tweetId=X
+ * Returns up to 20 quotes per page, ordered by quote time desc.
+ */
+export async function getTweetQuotes(
+  tweetId: string,
+  opts: { pages?: number } = {}
+): Promise<{ tweets: Tweet[]; nextCursor: string | null }> {
+  const pages = opts.pages || 1;
+  let allTweets: Tweet[] = [];
+  let cursor = "";
+  let nextCursor: string | null = null;
+
+  for (let page = 0; page < pages; page++) {
+    const params: Record<string, string> = { tweetId };
+    if (cursor) params.cursor = cursor;
+
+    const raw = await apiGet("/twitter/tweet/quotes", params);
+    const tweets = parseTweets(raw.tweets);
+    allTweets.push(...tweets);
+
+    if (!raw.has_next_page || !raw.next_cursor) {
+      nextCursor = null;
+      break;
+    }
+    cursor = raw.next_cursor;
+    nextCursor = raw.next_cursor;
+    if (page < pages - 1) await sleep(RATE_DELAY_MS);
+  }
+
+  return { tweets: allTweets, nextCursor };
+}
+
+export interface Trend {
+  name: string;
+  query: string;
+  rank: number;
+}
+
+export interface TrendsResult {
+  trends: Trend[];
+  metadata: {
+    timestamp: number;
+    woeid: { name: string; id: number };
+  };
+}
+
+/**
+ * Get trending topics.
+ * GET /twitter/trends?woeid=X
+ * Default woeid=1 for worldwide trends.
+ */
+export async function getTrends(
+  opts: { woeid?: number } = {}
+): Promise<TrendsResult> {
+  const woeid = opts.woeid || 1;
+  const raw = await apiGet("/twitter/trends", { woeid: String(woeid) });
+
+  const trends: Trend[] = (raw.trends || []).map((t: any) => ({
+    name: t.trend?.name || "",
+    query: t.trend?.target?.query || "",
+    rank: t.trend?.rank || 0,
+  }));
+
+  return {
+    trends,
+    metadata: {
+      timestamp: raw.metadata?.timestamp || 0,
+      woeid: {
+        name: raw.metadata?.woeid?.name || "Worldwide",
+        id: raw.metadata?.woeid?.id || woeid,
+      },
+    },
+  };
 }
 
 /**
