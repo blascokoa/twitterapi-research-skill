@@ -84,6 +84,9 @@ bun run x-search.ts quotes TWEET_ID [--cursor CURSOR]
 # Verified followers of a user
 bun run x-search.ts followers username [--cursor CURSOR]
 
+# Mentions of a user
+bun run x-search.ts mentions username [--pages N]
+
 # Trends by location
 bun run x-search.ts trends [--woeid 1]
 
@@ -150,6 +153,7 @@ This skill uses [twitterapi.io](https://twitterapi.io) — a third-party Twitter
 | Deep research (15 pages, ~300 tweets) | ~$0.045 |
 | Profile check (user + 20 tweets) | ~$0.003 |
 | Watchlist check (5 accounts) | ~$0.015 |
+| User mentions (1 page, 20 tweets) | ~$0.003 |
 | Trends lookup | ~$0.00015 |
 | Cached repeat (any) | free |
 

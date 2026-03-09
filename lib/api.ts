@@ -556,6 +556,40 @@ export async function getTweetQuotes(
   return { tweets: allTweets, nextCursor };
 }
 
+/**
+ * Get tweets mentioning a user.
+ * GET /twitter/user/mentions?userName=X
+ * Returns up to 20 mentions per page, ordered by time desc.
+ */
+export async function getUserMentions(
+  username: string,
+  opts: { pages?: number } = {}
+): Promise<{ tweets: Tweet[]; nextCursor: string | null }> {
+  const pages = opts.pages || 1;
+  let allTweets: Tweet[] = [];
+  let cursor = "";
+  let nextCursor: string | null = null;
+
+  for (let page = 0; page < pages; page++) {
+    const params: Record<string, string> = { userName: username };
+    if (cursor) params.cursor = cursor;
+
+    const raw = await apiGet("/twitter/user/mentions", params);
+    const tweets = parseTweets(raw.tweets);
+    allTweets.push(...tweets);
+
+    if (!raw.has_next_page || !raw.next_cursor) {
+      nextCursor = null;
+      break;
+    }
+    cursor = raw.next_cursor;
+    nextCursor = raw.next_cursor;
+    if (page < pages - 1) await sleep(RATE_DELAY_MS);
+  }
+
+  return { tweets: allTweets, nextCursor };
+}
+
 export interface Trend {
   name: string;
   query: string;

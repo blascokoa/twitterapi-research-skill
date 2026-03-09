@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.5.0 (2026-03-09)
+
+### Added
+- **`mentions` command** — Fetch tweets mentioning a user (`GET /twitter/user/mentions`), with pagination support via `--pages N`
+- New `getUserMentions()` API function in `lib/api.ts`
+- 2 new integration tests for the mentions endpoint
+- Documentation updated across x-api.md, SKILL.md, README.md, and CHANGELOG.md
+
 ## v2.4.0 (2026-03-09)
 
 ### Added — New API Endpoints

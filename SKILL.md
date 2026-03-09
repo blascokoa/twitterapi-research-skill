@@ -125,6 +125,14 @@ bun run x-search.ts user-tweets <username> [--json]
 
 Fetches a user's most recent tweets (excludes replies by default). The API nests tweets inside `data.tweets`.
 
+### User Mentions
+
+```bash
+bun run x-search.ts mentions <username> [--pages N] [--json]
+```
+
+Fetches tweets mentioning the specified user. Returns up to 20 mentions per page, ordered by time descending. Supports pagination.
+
 ### Trends
 
 ```bash
@@ -236,7 +244,7 @@ twitterapi-research-skill/
 ├── x-search.ts        (CLI entry point)
 ├── lib/
 │   ├── api.ts         (twitterapi.io wrapper: search, thread, profile, tweet,
-│   │                   tweets, replies, quotes, followers, user-tweets, trends)
+│   │                   tweets, replies, quotes, followers, user-tweets, mentions, trends)
 │   ├── cache.ts       (file-based cache, 15min TTL)
 │   └── format.ts      (Telegram + markdown formatters)
 ├── data/
@@ -251,15 +259,16 @@ twitterapi-research-skill/
 
 ## API Endpoints Summary
 
-| Endpoint | CLI Command | API Function | Cost |
-|----------|-------------|--------------|------|
-| Search tweets | `search` | `search()` | 1 credit/page |
-| Get thread | `thread` | `thread()` | 1 credit/page |
-| User profile tweets | `profile` | `profile()` | 1 credit |
-| Single tweet | `tweet` | `tweet()` | 1 credit |
-| Multiple tweets by ID | `tweets` | `getTweetsByIds()` | 1 credit |
-| Tweet replies | `replies` | `getTweetReplies()` | 1 credit/page |
-| Quote tweets | `quotes` | `getTweetQuotes()` | 1 credit/page |
-| Verified followers | `followers` | `getVerifiedFollowers()` | 1 credit/page |
-| User last tweets | `user-tweets` | `getUserLastTweets()` | 1 credit |
-| Trending topics | `trends` | `getTrends()` | 1 credit |
+| Endpoint | CLI Command | API Function | Cost           |
+|----------|-------------|--------------|----------------|
+| Search tweets | `search` | `search()` | 1 credit/tweet |
+| Get thread | `thread` | `thread()` | 1 credit/tweet |
+| User profile tweets | `profile` | `profile()` | 1 credit/tweet |
+| Single tweet | `tweet` | `tweet()` | 1 credit       |
+| Multiple tweets by ID | `tweets` | `getTweetsByIds()` | 1 credit/tweet |
+| Tweet replies | `replies` | `getTweetReplies()` | 1 credit/tweet |
+| Quote tweets | `quotes` | `getTweetQuotes()` | 1 credit/tweet |
+| User mentions | `mentions` | `getUserMentions()` | 1 credit/tweet |
+| Verified followers | `followers` | `getVerifiedFollowers()` | 1 credit/tweet |
+| User last tweets | `user-tweets` | `getUserLastTweets()` | 1 credit/tweet      |
+| Trending topics | `trends` | `getTrends()` | 1 credit       |

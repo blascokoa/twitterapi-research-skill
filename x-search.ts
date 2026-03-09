@@ -12,6 +12,7 @@
  *   quotes <tweet_id>           Fetch quote tweets
  *   followers <user_id>         Fetch verified followers
  *   user-tweets <username>      Fetch user's last tweets
+ *   mentions <username>          Fetch tweets mentioning a user
  *   trends [--woeid N]          Fetch trending topics
  *   watchlist                   Show watchlist
  *   watchlist add <user>        Add user to watchlist
@@ -504,6 +505,25 @@ async function cmdUserTweets() {
   }
 }
 
+async function cmdMentions() {
+  const username = args[1];
+  if (!username) { console.error("Usage: mentions <username> [--pages N] [--json]"); process.exit(1); }
+  const pages = parseInt(getOpt("pages") || "1");
+  const asJson = getFlag("json");
+  const { tweets, nextCursor } = await api.getUserMentions(username, { pages });
+
+  if (asJson) {
+    console.log(JSON.stringify({ tweets, nextCursor }, null, 2));
+  } else {
+    console.log(`📢 Mentions of @${username} (${tweets.length})\n`);
+    for (const t of tweets) {
+      console.log(fmt.formatTweetTelegram(t, undefined, { full: true }));
+      console.log();
+    }
+    if (nextCursor) console.log(`Next cursor: ${nextCursor}`);
+  }
+}
+
 async function cmdTrends() {
   const woeid = parseInt(getOpt("woeid") || "1");
   const asJson = getFlag("json");
@@ -538,6 +558,7 @@ Commands:
   thread <tweet_id>           Fetch full conversation thread
   profile <username>          Recent tweets from a user
   tweet <tweet_id>            Fetch a single tweet
+  mentions <username>         Fetch tweets mentioning a user
   watchlist                   Show watchlist
   watchlist add <user> [note] Add user to watchlist
   watchlist remove <user>     Remove user from watchlist
@@ -595,6 +616,10 @@ async function main() {
     case "user-tweets":
     case "ut":
       await cmdUserTweets();
+      break;
+    case "mentions":
+    case "m":
+      await cmdMentions();
       break;
     case "trends":
       await cmdTrends();

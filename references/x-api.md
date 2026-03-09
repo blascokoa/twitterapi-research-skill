@@ -234,6 +234,27 @@ Recent tweets sorted by creation time. 20 per page.
 
 **Note:** Tweets are nested inside `data.tweets`, not at the top level. Pagination fields (`has_next_page`, `next_cursor`) are at the top level.
 
+### Get User Mentions
+```
+GET https://api.twitterapi.io/twitter/user/mentions?userName=handle
+```
+Returns tweets mentioning the specified user. 20 per page, ordered by time descending.
+
+**Parameters:**
+- `userName` (required) — Screen name of the user
+- `cursor` — Pagination cursor
+
+**Response:**
+```json
+{
+  "tweets": [{ /* standard tweet schema */ }],
+  "has_next_page": true,
+  "next_cursor": "cursor_string",
+  "status": "success",
+  "msg": ""
+}
+```
+
 ### Get Verified Followers
 ```
 GET https://api.twitterapi.io/twitter/user/verifiedFollowers?user_id=USER_ID
@@ -341,6 +362,7 @@ A typical research session: 5 queries × 5 pages × 20 tweets = 500 tweet reads 
 | Deep research (15 pages, ~300 tweets) | ~$0.045 |
 | Profile check (user + 20 tweets) | ~$0.003 |
 | Watchlist check (5 accounts) | ~$0.015 |
+| User mentions (1 page, 20 tweets) | ~$0.003 |
 | Verified followers (1 page, 20 users) | ~$0.003 |
 | Trends lookup | ~$0.00015 |
 | Cached repeat (any) | free |
@@ -364,6 +386,7 @@ A typical research session: 5 queries × 5 pages × 20 tweets = 500 tweet reads 
 | `tweets <id1> <id2> ...` | Batch fetch tweets by IDs |
 | `replies <tweet_id>` | Fetch replies to a tweet |
 | `quotes <tweet_id>` | Fetch quote tweets |
+| `mentions <username>` | Fetch tweets mentioning a user |
 | `followers <user_id>` | Fetch verified followers |
 | `user-tweets <username>` | Fetch user's last tweets |
 | `trends [--woeid N]` | Fetch trending topics |

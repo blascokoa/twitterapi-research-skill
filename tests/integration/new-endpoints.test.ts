@@ -13,6 +13,7 @@ import {
   getTweetQuotes,
   getVerifiedFollowers,
   getUserLastTweets,
+  getUserMentions,
   getTrends,
   type Tweet,
 } from "../../lib/api";
@@ -138,6 +139,30 @@ describe.skipIf(!hasToken)("API Integration: getUserLastTweets", () => {
     const { tweets } = await getUserLastTweets("openai", { count: 3 });
     expect(tweets.length).toBeGreaterThan(0);
     expect(tweets.length).toBeLessThanOrEqual(3);
+  }, 30_000);
+});
+
+// --- getUserMentions ---
+describe.skipIf(!hasToken)("API Integration: getUserMentions", () => {
+  it("fetches mentions for a popular user", async () => {
+    const { tweets, nextCursor } = await getUserMentions("elonmusk");
+    expect(Array.isArray(tweets)).toBe(true);
+    expect(tweets.length).toBeGreaterThan(0);
+
+    const t = tweets[0];
+    expect(t.id).toBeTruthy();
+    expect(t.text).toBeTruthy();
+    expect(t.username).toBeTruthy();
+    expect(typeof t.metrics.likes).toBe("number");
+  }, 30_000);
+
+  it("returns empty for non-existent user", async () => {
+    try {
+      const { tweets } = await getUserMentions("xyznonexistentuser99999");
+      expect(Array.isArray(tweets)).toBe(true);
+    } catch (e: any) {
+      expect(e.message).toBeTruthy();
+    }
   }, 30_000);
 });
 

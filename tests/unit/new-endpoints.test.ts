@@ -10,6 +10,7 @@ import {
   getTweetQuotes,
   getVerifiedFollowers,
   getUserLastTweets,
+  getUserMentions,
   getTrends,
   type Tweet,
   type UserProfile,
