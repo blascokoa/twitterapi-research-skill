@@ -7,7 +7,7 @@
 import { readFileSync } from "fs";
 
 const BASE = "https://api.twitterapi.io";
-const RATE_DELAY_MS = 200; // twitterapi.io supports up to 200 QPS
+const RATE_DELAY_MS = 10_000; // 10s between paginated queries to avoid rate limits
 
 function getApiKey(): string {
   // Try env first
@@ -52,6 +52,7 @@ export interface Tweet {
   urls: string[];
   mentions: string[];
   hashtags: string[];
+  media: Array<Record<string, any>>;
   tweet_url: string;
 }
 
@@ -73,6 +74,13 @@ function parseTwitterDate(dateStr: string): string {
  */
 function parseTweet(t: any): Tweet {
   const author = t.author || {};
+  const rawMedia =
+    t.extendedEntities?.media ||
+    t.extended_entities?.media ||
+    t.entities?.media ||
+    t.media ||
+    [];
+
   return {
     id: t.id || "",
     text: t.text || "",
@@ -92,12 +100,13 @@ function parseTweet(t: any): Tweet {
     urls: (t.entities?.urls || [])
       .map((u: any) => u.expanded_url || u.url)
       .filter(Boolean),
-    mentions: (t.entities?.mentions || [])
-      .map((m: any) => m.username || m.userName)
+    mentions: (t.entities?.mentions || t.entities?.user_mentions || [])
+      .map((m: any) => m.username || m.userName || m.screen_name)
       .filter(Boolean),
     hashtags: (t.entities?.hashtags || [])
       .map((h: any) => h.tag || h.text)
       .filter(Boolean),
+    media: Array.isArray(rawMedia) ? rawMedia : [],
     tweet_url: t.url || `https://x.com/${author.userName || "?"}/status/${t.id}`,
   };
 }
