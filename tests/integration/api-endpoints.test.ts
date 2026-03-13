@@ -88,12 +88,14 @@ describe.skipIf(!hasToken)("API Integration: search", () => {
       expect(Array.isArray(t.urls)).toBe(true);
       expect(Array.isArray(t.mentions)).toBe(true);
       expect(Array.isArray(t.hashtags)).toBe(true);
+      expect(Array.isArray(t.media)).toBe(true);
     }
   }, 30_000);
 });
 
 describe.skipIf(!hasToken)("API Integration: getTweet", () => {
   let knownTweetId: string;
+  const knownMediaTweetId = "2032132980626333723";
 
   // First, find a real tweet ID via search to use in subsequent tests
   beforeAll(async () => {
@@ -109,6 +111,20 @@ describe.skipIf(!hasToken)("API Integration: getTweet", () => {
     expect(tweet!.text).toBeTruthy();
     expect(tweet!.username).toBeTruthy();
     expect(tweet!.metrics).toBeDefined();
+  }, 30_000);
+
+  it("includes media info when tweet contains media", async () => {
+    const tweet = await getTweet(knownMediaTweetId);
+    expect(tweet).not.toBeNull();
+    expect(tweet!.id).toBe(knownMediaTweetId);
+    expect(Array.isArray(tweet!.media)).toBe(true);
+    expect(tweet!.media.length).toBeGreaterThan(0);
+
+    const firstMedia = tweet!.media[0] as Record<string, any>;
+    expect(firstMedia.type).toBeTruthy();
+    expect(
+      Boolean(firstMedia.media_url_https || firstMedia.url || firstMedia.expanded_url)
+    ).toBe(true);
   }, 30_000);
 
   it("returns null for non-existent tweet", async () => {

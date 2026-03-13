@@ -128,11 +128,13 @@ describe("Tweet type compatibility", () => {
       urls: [],
       mentions: ["@original_poster"],
       hashtags: [],
+      media: [{ type: "photo", media_url_https: "https://pbs.twimg.com/media/test.jpg" }],
       tweet_url: "https://x.com/replier/status/123",
     };
 
     expect(tweet.id).toBe("123");
     expect(tweet.conversation_id).toBe("100");
     expect(tweet.metrics.likes).toBe(5);
+    expect(tweet.media[0].type).toBe("photo");
   });
 });
