@@ -1,4 +1,6 @@
 ### Node template
+data/cache/
+
 # Logs
 logs
 *.log
