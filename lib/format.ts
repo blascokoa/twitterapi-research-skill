@@ -38,6 +38,11 @@ export function formatTweetTelegram(t: Tweet, index?: number, opts?: { full?: bo
   if (t.urls.length > 0) {
     out += `\n🔗 ${t.urls[0]}`;
   }
+  // Include images if available
+  if (t.media.length > 0) {
+    const imageUrl = t.media[0].media_url_https || t.media[0].url;
+    out += `\n🖼️ ${imageUrl}`;
+  }
   out += `\n${t.tweet_url}`;
 
   return out;
@@ -79,6 +84,10 @@ export function formatTweetMarkdown(t: Tweet): string {
 
   if (t.urls.length > 0) {
     out += `\n  Links: ${t.urls.map((u) => `[${new URL(u).hostname}](${u})`).join(", ")}`;
+  }
+  if (t.media.length > 0) {
+    const imageUrl = t.media[0].media_url_https || t.media[0].url;
+    out += `\n  Image: [View](${imageUrl})`;
   }
 
   return out;
